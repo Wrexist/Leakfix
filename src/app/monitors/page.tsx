@@ -2,10 +2,17 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { MonitorForm } from "@/components/monitors/MonitorForm";
+import { MonitorNotifyForm } from "@/components/monitors/MonitorNotifyForm";
 import { MonitorRowActions } from "@/components/monitors/MonitorRowActions";
 import { ScoreTrend, type TrendPoint } from "@/components/report/ScoreTrend";
+import { emailConfigured } from "@/lib/scan/email";
 import { monitorLabel, toMonitorDto } from "@/lib/scan/monitors";
-import { getScansForUrl, listMonitors } from "@/lib/scan/repository";
+import { isNotifyPolicy } from "@/lib/scan/notify-policy";
+import {
+  getNotificationsForMonitor,
+  getScansForUrl,
+  listMonitors,
+} from "@/lib/scan/repository";
 import { SCAN_KIND_LABEL } from "@/lib/scan/types";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +33,7 @@ function formatDate(iso: string | null): string {
 
 export default async function MonitorsPage() {
   const rows = await listMonitors();
+  const emailEnabled = emailConfigured();
 
   const monitors = await Promise.all(
     rows.map(async (row) => {
@@ -35,11 +43,13 @@ export default async function MonitorsPage() {
         label: scan.createdAt.toISOString(),
       }));
       const ids = scans.map((scan) => scan.id);
+      const notifications = await getNotificationsForMonitor(row.id, 5);
       return {
         dto: toMonitorDto(row),
         label: monitorLabel(row),
         trend,
         ids,
+        notifications,
       };
     }),
   );
@@ -68,7 +78,7 @@ export default async function MonitorsPage() {
         </div>
       ) : (
         <ul className="mt-10 space-y-4">
-          {monitors.map(({ dto, label, trend, ids }) => {
+          {monitors.map(({ dto, label, trend, ids, notifications }) => {
             const latest = trend.length > 0 ? trend[trend.length - 1] : null;
             const previous = trend.length > 1 ? trend[trend.length - 2] : null;
             const delta =
@@ -77,6 +87,13 @@ export default async function MonitorsPage() {
                 : null;
             const compareHref =
               ids.length >= 2 ? `/compare?a=${ids[ids.length - 2]}&b=${ids[ids.length - 1]}` : null;
+            const policy = isNotifyPolicy(dto.notifyPolicy) ? dto.notifyPolicy : "drop";
+            const channels = [
+              dto.notifyWebhookUrl ? "webhook" : null,
+              dto.notifyEmail ? "email" : null,
+            ]
+              .filter(Boolean)
+              .join(" + ");
 
             return (
               <li key={dto.id} className="rounded-2xl border border-line bg-white p-5 sm:p-6">
@@ -140,6 +157,54 @@ export default async function MonitorsPage() {
                   </div>
                   <MonitorRowActions id={dto.id} />
                 </div>
+
+                <details className="mt-4 border-t border-line pt-4">
+                  <summary className="cursor-pointer text-sm font-medium text-ink-soft">
+                    Notifications
+                    {channels ? (
+                      <span className="ml-2 text-ink-faint">
+                        {channels} · {policy === "drop" ? "on drop" : policy === "change" ? "on change" : "every scan"}
+                      </span>
+                    ) : (
+                      <span className="ml-2 text-ink-faint">not configured</span>
+                    )}
+                  </summary>
+
+                  <MonitorNotifyForm
+                    id={dto.id}
+                    webhookUrl={dto.notifyWebhookUrl}
+                    email={dto.notifyEmail}
+                    policy={policy}
+                    emailEnabled={emailEnabled}
+                  />
+
+                  {notifications.length > 0 ? (
+                    <div className="mt-4">
+                      <h3 className="text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                        Recent notifications
+                      </h3>
+                      <ul className="mt-2 space-y-1.5">
+                        {notifications.map((entry) => (
+                          <li key={entry.id} className="text-xs text-ink-faint">
+                            {formatDate(entry.createdAt.toISOString())} · {entry.channel} ·{" "}
+                            <span
+                              className={
+                                entry.status === "sent"
+                                  ? "text-positive"
+                                  : entry.status === "failed"
+                                    ? "text-red-600"
+                                    : ""
+                              }
+                            >
+                              {entry.status}
+                            </span>{" "}
+                            · {entry.detail}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+                </details>
               </li>
             );
           })}

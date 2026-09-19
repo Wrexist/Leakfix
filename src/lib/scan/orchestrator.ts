@@ -9,6 +9,7 @@ import { safeFetch } from "./fetcher";
 import { runAudit, summarizeChecks } from "./engine";
 import { buildAppInsights } from "./insights/app";
 import { buildWebsiteInsights } from "./insights/seo";
+import { notifyMonitorChange } from "./notifications";
 import { scoreFindings } from "./score";
 import { userFacingScanError, type ScanErrorCode } from "./errors";
 import * as repository from "./repository";
@@ -209,6 +210,8 @@ async function analyzeWebsite(
     checksTotal: auditSummary.total,
     durationMs: elapsed(),
   });
+
+  await notifyMonitorChange(scanId);
   return "completed";
 }
 
@@ -272,6 +275,8 @@ async function analyzeApp(
     checksTotal: auditSummary.total,
     durationMs: elapsed(),
   });
+
+  await notifyMonitorChange(scanId);
   return "completed";
 }
 

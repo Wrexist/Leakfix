@@ -64,6 +64,53 @@ jobs:
 0 7 * * * curl -fsS -X POST https://your-host/api/cron/rescan -H "Authorization: Bearer $CRON_SECRET"
 ```
 
+## Change notifications
+
+Each monitor can notify on a schedule result:
+
+- **Webhook URL** — receives an HTTP `POST` with JSON. The payload includes
+  `text` and `content` (so Slack and Discord render it directly) plus structured
+  fields: `subject`, `score`, `previousScore`, `delta`, `newIssues`,
+  `fixedIssues`, `reportUrl`, and `compareUrl`.
+- **Email** — sent through an HTTP email provider. Set `EMAIL_API_KEY` and
+  `EMAIL_FROM` (Resend by default; override the endpoint with `EMAIL_API_URL`).
+  When the key is absent, email deliveries are recorded as `skipped` and webhooks
+  still work.
+- **Policy** — notify `drop` (default), on any `change`, or `always`.
+
+Configure them per monitor under **Notifications** on `/monitors`, and use
+**Send test** to verify each channel. Every attempt is recorded in the
+`notifications` table and shown as recent activity under the monitor.
+
+### Why this is safe
+
+Webhook URLs are attacker-controllable, so they go through the same network
+policy as the scanner (`src/lib/scan/webhook.ts`): `https` required in
+production, DNS re-validation, and private/loopback/CGNAT ranges blocked. Email
+is sent to a fixed provider endpoint, so it is not SSRF-reachable.
+
+### Example webhook payload
+
+```json
+{
+  "text": "LeakFix monitoring — example.com\nhttps://example.com/\n\nScore: 62 → 58 (-4)\nNew issues: 1\nFixed: 2",
+  "content": "…same text…",
+  "subject": "LeakFix: example.com score dropped from 62 to 58",
+  "monitor": { "id": "…", "label": "example.com", "url": "https://example.com/" },
+  "score": 58,
+  "previousScore": 62,
+  "delta": -4,
+  "newIssues": [{ "ruleId": "security.csp-missing", "title": "Missing Content Security Policy", "severity": "medium" }],
+  "fixedIssues": [],
+  "reportUrl": "https://your-host/scan/…",
+  "compareUrl": "https://your-host/compare?a=…&b=…"
+}
+```
+
+Notifications are sent from the scan pipeline for every completed scan of a
+monitored target, so manual scans and scheduled scans both notify. Delivery
+failures are logged and never break the scan.
+
 ## Design notes and limitations
 
 - Scans run inside the web process, one monitor at a time per request. For a large

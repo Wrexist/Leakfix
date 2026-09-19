@@ -66,10 +66,34 @@ export const monitors = pgTable(
     lastScanId: text("last_scan_id"),
     lastScore: integer("last_score"),
     lastScannedAt: timestamp("last_scanned_at", { withTimezone: true }),
+    notifyWebhookUrl: text("notify_webhook_url"),
+    notifyEmail: text("notify_email"),
+    notifyPolicy: text("notify_policy").notNull().default("drop"),
+    lastNotifiedAt: timestamp("last_notified_at", { withTimezone: true }),
+    lastNotifiedScore: integer("last_notified_score"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [uniqueIndex("monitors_normalized_url_idx").on(table.normalizedUrl)],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    monitorId: text("monitor_id")
+      .notNull()
+      .references(() => monitors.id, { onDelete: "cascade" }),
+    scanId: text("scan_id"),
+    channel: text("channel").notNull(),
+    target: text("target").notNull(),
+    status: text("status").notNull(),
+    detail: text("detail"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [index("notifications_monitor_id_idx").on(table.monitorId)],
 );
 
 export type ScanRow = typeof scans.$inferSelect;
@@ -78,3 +102,5 @@ export type FindingRow = typeof findings.$inferSelect;
 export type NewFindingRow = typeof findings.$inferInsert;
 export type MonitorRow = typeof monitors.$inferSelect;
 export type NewMonitorRow = typeof monitors.$inferInsert;
+export type NotificationRow = typeof notifications.$inferSelect;
+export type NewNotificationRow = typeof notifications.$inferInsert;

@@ -14,6 +14,7 @@ import {
   getFindingsForScan,
   getMonitorById,
   getMonitorByUrl,
+  getNotificationsForMonitor,
   getScanById,
   getScansForUrl,
   updateMonitor,
@@ -33,6 +34,7 @@ beforeAll(async () => {
   delete goodResponseHeaders["content-encoding"];
 
   server = http.createServer((request, response) => {
+    request.resume();
     const url = request.url ?? "/";
     if (url === "/robots.txt") {
       response.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
@@ -203,6 +205,28 @@ describe("scan orchestrator (end to end, local fixture server)", () => {
 
     await deleteMonitor(monitor.id);
     expect(await getMonitorById(monitor.id)).toBeNull();
+  });
+
+  it("delivers a webhook notification when a monitored target changes", async () => {
+    const url = `${baseUrl}/good`;
+    await runFullScan("/good");
+
+    const monitor = await createMonitor({ normalizedUrl: url, kind: "website", label: "Hooked" });
+    await updateMonitor(monitor.id, {
+      notifyWebhookUrl: `${baseUrl}/hook`,
+      notifyPolicy: "always",
+    });
+
+    const result = await runFullScan("/good");
+    expect(result.scan.status).toBe("completed");
+
+    const entries = await getNotificationsForMonitor(monitor.id, 5);
+    expect(entries.some((entry) => entry.channel === "webhook" && entry.status === "sent")).toBe(true);
+
+    const updated = await getMonitorById(monitor.id);
+    expect(updated?.lastNotifiedAt).not.toBeNull();
+
+    await deleteMonitor(monitor.id);
   });
 
   it("does not throw when the scan row is missing", async () => {

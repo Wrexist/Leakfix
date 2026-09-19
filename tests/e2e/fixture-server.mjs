@@ -5,6 +5,7 @@ import { GOOD_PAGE, LEAKY_PAGE } from "./fixtures.mjs";
 const port = Number(process.env.FIXTURE_PORT ?? 3101);
 
 const server = http.createServer((request, response) => {
+  request.resume();
   const url = request.url ?? "/";
 
   if (url.startsWith("/slow")) {

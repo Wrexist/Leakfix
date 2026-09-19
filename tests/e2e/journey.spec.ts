@@ -101,6 +101,16 @@ test("monitors a target", async ({ page }) => {
   await page.goto("/monitors");
   await expect(page.getByRole("heading", { name: /track your targets/i })).toBeVisible();
   await expect(page.getByText("127.0.0.1").first()).toBeVisible();
+
+  // Configure and test notifications.
+  await page.getByText("Notifications").first().click();
+  await page.getByLabel("Webhook URL").fill(`${FIXTURE_ORIGIN}/hook`);
+  await page.getByLabel("Notify me").selectOption("always");
+  await page.getByRole("button", { name: /^save$/i }).click();
+  await expect(page.getByText(/notification settings saved/i)).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: /send test/i }).click();
+  await expect(page.getByText(/webhook: sent/i)).toBeVisible({ timeout: 15_000 });
 });
 
 test("compares two scans side by side", async ({ page }) => {

@@ -4,9 +4,11 @@ import { getDb } from "@/lib/db/client";
 import {
   findings,
   monitors,
+  notifications,
   scans,
   type FindingRow,
   type MonitorRow,
+  type NotificationRow,
   type ScanRow,
 } from "@/lib/db/schema";
 
@@ -106,6 +108,11 @@ export interface UpdateMonitorPatch {
   lastScore?: number | null;
   lastScannedAt?: Date | null;
   scanCount?: number;
+  notifyWebhookUrl?: string | null;
+  notifyEmail?: string | null;
+  notifyPolicy?: string;
+  lastNotifiedAt?: Date | null;
+  lastNotifiedScore?: number | null;
 }
 
 export async function createMonitor(input: {
@@ -157,4 +164,40 @@ export async function updateMonitor(id: string, patch: UpdateMonitorPatch): Prom
 export async function deleteMonitor(id: string): Promise<void> {
   const { db } = await getDb();
   await db.delete(monitors).where(eq(monitors.id, id));
+}
+
+export async function insertNotification(input: {
+  monitorId: string;
+  scanId: string | null;
+  channel: string;
+  target: string;
+  status: string;
+  detail?: string | null;
+}): Promise<NotificationRow> {
+  const { db } = await getDb();
+  const [row] = await db
+    .insert(notifications)
+    .values({
+      monitorId: input.monitorId,
+      scanId: input.scanId,
+      channel: input.channel,
+      target: input.target,
+      status: input.status,
+      detail: input.detail ?? null,
+    })
+    .returning();
+  return row;
+}
+
+export async function getNotificationsForMonitor(
+  monitorId: string,
+  limit = 10,
+): Promise<NotificationRow[]> {
+  const { db } = await getDb();
+  return db
+    .select()
+    .from(notifications)
+    .where(eq(notifications.monitorId, monitorId))
+    .orderBy(desc(notifications.createdAt))
+    .limit(limit);
 }

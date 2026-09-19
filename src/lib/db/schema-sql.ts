@@ -49,11 +49,29 @@ CREATE TABLE IF NOT EXISTS monitors (
   last_scan_id text,
   last_score integer,
   last_scanned_at timestamptz,
+  notify_webhook_url text,
+  notify_email text,
+  notify_policy text NOT NULL DEFAULT 'drop',
+  last_notified_at timestamptz,
+  last_notified_score integer,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS monitors_normalized_url_idx ON monitors (normalized_url);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id text PRIMARY KEY,
+  monitor_id text NOT NULL REFERENCES monitors(id) ON DELETE CASCADE,
+  scan_id text,
+  channel text NOT NULL,
+  target text NOT NULL,
+  status text NOT NULL,
+  detail text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS notifications_monitor_id_idx ON notifications (monitor_id);
 
 -- Idempotent upgrades for databases created before these columns existed.
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS audit_summary jsonb;
@@ -61,4 +79,9 @@ ALTER TABLE scans ADD COLUMN IF NOT EXISTS insights jsonb;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'website';
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS subject jsonb;
 ALTER TABLE findings ADD COLUMN IF NOT EXISTS details jsonb;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_webhook_url text;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_email text;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_policy text NOT NULL DEFAULT 'drop';
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_notified_at timestamptz;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_notified_score integer;
 `;

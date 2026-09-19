@@ -1,5 +1,6 @@
 import type { MonitorRow } from "@/lib/db/schema";
 
+import { isNotifyPolicy } from "./notify-policy";
 import { isScanKind, type ScanKind } from "./types";
 
 export interface MonitorDto {
@@ -12,6 +13,11 @@ export interface MonitorDto {
   lastScanId: string | null;
   lastScore: number | null;
   lastScannedAt: string | null;
+  notifyWebhookUrl: string | null;
+  notifyEmail: string | null;
+  notifyPolicy: string;
+  lastNotifiedAt: string | null;
+  lastNotifiedScore: number | null;
   createdAt: string;
 }
 
@@ -26,6 +32,11 @@ export function toMonitorDto(row: MonitorRow): MonitorDto {
     lastScanId: row.lastScanId,
     lastScore: row.lastScore,
     lastScannedAt: row.lastScannedAt ? row.lastScannedAt.toISOString() : null,
+    notifyWebhookUrl: row.notifyWebhookUrl,
+    notifyEmail: row.notifyEmail,
+    notifyPolicy: isNotifyPolicy(row.notifyPolicy) ? row.notifyPolicy : "drop",
+    lastNotifiedAt: row.lastNotifiedAt ? row.lastNotifiedAt.toISOString() : null,
+    lastNotifiedScore: row.lastNotifiedScore,
     createdAt: row.createdAt.toISOString(),
   };
 }

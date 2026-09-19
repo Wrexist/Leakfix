@@ -73,7 +73,7 @@ function mapUrlErrorCode(code: string): ScanErrorCode {
   return "INVALID_URL";
 }
 
-async function resolveAndValidateHost(
+export async function resolveAndValidateHost(
   hostname: string,
   allowPrivate: boolean,
 ): Promise<{ ok: true } | FetchFailure> {
