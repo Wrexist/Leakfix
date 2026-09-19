@@ -17,6 +17,12 @@ export function SiteHeader() {
             What we check
           </Link>
           <Link
+            href="/monitors"
+            className="hidden text-sm font-medium text-ink-soft transition-colors hover:text-ink sm:inline-flex"
+          >
+            Monitors
+          </Link>
+          <Link
             href="/#faq"
             className="hidden text-sm font-medium text-ink-soft transition-colors hover:text-ink sm:inline-flex"
           >

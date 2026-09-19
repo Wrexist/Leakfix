@@ -39,6 +39,22 @@ CREATE TABLE IF NOT EXISTS findings (
 
 CREATE INDEX IF NOT EXISTS findings_scan_id_idx ON findings (scan_id);
 
+CREATE TABLE IF NOT EXISTS monitors (
+  id text PRIMARY KEY,
+  normalized_url text NOT NULL,
+  kind text NOT NULL DEFAULT 'website',
+  label text,
+  active boolean NOT NULL DEFAULT true,
+  scan_count integer NOT NULL DEFAULT 0,
+  last_scan_id text,
+  last_score integer,
+  last_scanned_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS monitors_normalized_url_idx ON monitors (normalized_url);
+
 -- Idempotent upgrades for databases created before these columns existed.
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS audit_summary jsonb;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS insights jsonb;

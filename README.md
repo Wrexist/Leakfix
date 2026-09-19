@@ -56,6 +56,10 @@ slice: homepage → scan → persisted results → polished, tabbed report.
   canonical, robots, structured data, language).
 - **Recent scans** remembered locally in the browser, and **rate limiting** on
   the scan endpoint.
+- **Monitoring**: add any target to `/monitors`, re-scan it on a schedule via the
+  authenticated `GET|POST /api/cron/rescan` endpoint, watch the score trend, and
+  diff any two scans on `/compare?a=…&b=…`. See
+  [docs/monitoring.md](docs/monitoring.md).
 - An **explicit scan state machine** (`queued → fetching → analyzing →
   completed | failed`) persisted in the database and reflected in the UI.
 - **Transparent scoring** (see [docs/architecture.md](docs/architecture.md)).

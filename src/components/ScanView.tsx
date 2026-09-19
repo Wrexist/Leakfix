@@ -18,9 +18,11 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 export function ScanView({
   initialScan,
   history,
+  monitored,
 }: {
   initialScan: ScanDto;
   history: ScanHistoryData;
+  monitored: boolean;
 }) {
   const [scan, setScan] = useState<ScanDto>(initialScan);
   const reduce = useReducedMotion();
@@ -76,7 +78,9 @@ export function ScanView({
         transition={{ duration: 0.4, ease: EASE }}
       >
         {view === "failed" ? <ScanErrorState scan={scan} /> : null}
-        {view === "report" ? <ScanReport scan={scan} history={history} /> : null}
+        {view === "report" ? (
+          <ScanReport scan={scan} history={history} monitored={monitored} />
+        ) : null}
         {view === "scanning" ? <ScanningPanel scan={scan} /> : null}
       </motion.div>
     </AnimatePresence>

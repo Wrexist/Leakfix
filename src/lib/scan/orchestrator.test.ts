@@ -8,7 +8,16 @@ import { disposeDb } from "@/lib/db/client";
 import { GOOD_HEADERS, GOOD_PAGE_HTML, LEAKY_PAGE_HTML } from "./__fixtures__/pages";
 import { loadScanHistory } from "./history";
 import { createScan, runScan } from "./orchestrator";
-import { getFindingsForScan, getScanById } from "./repository";
+import {
+  createMonitor,
+  deleteMonitor,
+  getFindingsForScan,
+  getMonitorById,
+  getMonitorByUrl,
+  getScanById,
+  getScansForUrl,
+  updateMonitor,
+} from "./repository";
 import { scoreFindings } from "./score";
 import { toScanDto } from "./dto";
 
@@ -169,6 +178,31 @@ describe("scan orchestrator (end to end, local fixture server)", () => {
     expect(history.diff?.fixed).toHaveLength(0);
     expect(history.diff?.persisting.length).toBeGreaterThan(0);
     expect(history.entries.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("tracks a monitor and its scan timeline", async () => {
+    const url = `${baseUrl}/good`;
+    await runFullScan("/good");
+
+    const monitor = await createMonitor({ normalizedUrl: url, kind: "website", label: "Good" });
+    expect((await getMonitorByUrl(url))?.id).toBe(monitor.id);
+
+    const timeline = await getScansForUrl(url, 5);
+    expect(timeline.length).toBeGreaterThan(0);
+
+    await updateMonitor(monitor.id, {
+      lastScanId: timeline[0].id,
+      lastScore: timeline[0].score,
+      lastScannedAt: new Date(),
+      scanCount: timeline.length,
+    });
+
+    const updated = await getMonitorById(monitor.id);
+    expect(updated?.lastScanId).toBe(timeline[0].id);
+    expect(updated?.scanCount).toBe(timeline.length);
+
+    await deleteMonitor(monitor.id);
+    expect(await getMonitorById(monitor.id)).toBeNull();
   });
 
   it("does not throw when the scan row is missing", async () => {

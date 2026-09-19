@@ -87,6 +87,37 @@ test("shows a not-found page for an unknown scan", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /page not found/i })).toBeVisible();
 });
 
+test("monitors a target", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/leaky`);
+  await page.getByRole("button", { name: /find my leaks/i }).first().click();
+  await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+
+  await page.getByRole("button", { name: /monitor this target/i }).click();
+  await expect(page.getByRole("link", { name: /manage monitors/i })).toBeVisible({
+    timeout: 15_000,
+  });
+
+  await page.goto("/monitors");
+  await expect(page.getByRole("heading", { name: /track your targets/i })).toBeVisible();
+  await expect(page.getByText("127.0.0.1").first()).toBeVisible();
+});
+
+test("compares two scans side by side", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/leaky`);
+  await page.getByRole("button", { name: /find my leaks/i }).first().click();
+  await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+
+  const compareLink = page.getByRole("link", { name: /compare side by side/i });
+  await expect(compareLink).toBeVisible({ timeout: 15_000 });
+  await compareLink.click();
+
+  await expect(page).toHaveURL(/\/compare\?a=/);
+  await expect(page.getByText(/Score is unchanged|Score improved|Score dropped/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: /fixed \(/i })).toBeVisible();
+});
+
 test("has no horizontal overflow on a phone-sized viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

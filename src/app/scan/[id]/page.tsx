@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { ScanView } from "@/components/ScanView";
 import { toScanDto } from "@/lib/scan/dto";
 import { loadScanHistory } from "@/lib/scan/history";
-import { getFindingsForScan, getScanById } from "@/lib/scan/repository";
+import { getFindingsForScan, getMonitorByUrl, getScanById } from "@/lib/scan/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,13 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
 
   const findings = await getFindingsForScan(id);
   const history = await loadScanHistory(scan);
+  const monitor = await getMonitorByUrl(scan.normalizedUrl);
 
-  return <ScanView initialScan={toScanDto(scan, findings)} history={history} />;
+  return (
+    <ScanView
+      initialScan={toScanDto(scan, findings)}
+      history={history}
+      monitored={monitor !== null}
+    />
+  );
 }

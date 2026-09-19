@@ -28,7 +28,13 @@ function formatDate(iso: string): string {
   }
 }
 
-export function ScanHistory({ history }: { history: ScanHistoryData }) {
+export function ScanHistory({
+  history,
+  currentId,
+}: {
+  history: ScanHistoryData;
+  currentId: string;
+}) {
   const { diff, entries } = history;
 
   if (!diff) {
@@ -77,6 +83,12 @@ export function ScanHistory({ history }: { history: ScanHistoryData }) {
           className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink"
         >
           View previous report
+        </Link>
+        <Link
+          href={`/compare?a=${diff.previousId}&b=${currentId}`}
+          className="font-medium text-brand underline decoration-brand/30 underline-offset-4 hover:decoration-brand"
+        >
+          Compare side by side
         </Link>
       </div>
 

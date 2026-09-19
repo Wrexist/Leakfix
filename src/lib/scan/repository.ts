@@ -1,7 +1,14 @@
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
-import { findings, scans, type FindingRow, type ScanRow } from "@/lib/db/schema";
+import {
+  findings,
+  monitors,
+  scans,
+  type FindingRow,
+  type MonitorRow,
+  type ScanRow,
+} from "@/lib/db/schema";
 
 import type { ScanInsights } from "./insights/types";
 import type { ScanStatus } from "./state";
@@ -79,4 +86,75 @@ export async function getFindingsForScan(scanId: string): Promise<FindingRow[]> 
     .from(findings)
     .where(eq(findings.scanId, scanId))
     .orderBy(asc(findings.sortIndex));
+}
+
+/** Completed scans of a target, newest first. Used for trends and comparisons. */
+export async function getScansForUrl(normalizedUrl: string, limit = 12): Promise<ScanRow[]> {
+  const { db } = await getDb();
+  return db
+    .select()
+    .from(scans)
+    .where(and(eq(scans.normalizedUrl, normalizedUrl), eq(scans.status, "completed")))
+    .orderBy(desc(scans.createdAt))
+    .limit(limit);
+}
+
+export interface UpdateMonitorPatch {
+  active?: boolean;
+  label?: string | null;
+  lastScanId?: string | null;
+  lastScore?: number | null;
+  lastScannedAt?: Date | null;
+  scanCount?: number;
+}
+
+export async function createMonitor(input: {
+  normalizedUrl: string;
+  kind: ScanKind;
+  label?: string | null;
+}): Promise<MonitorRow> {
+  const { db } = await getDb();
+  const [row] = await db
+    .insert(monitors)
+    .values({
+      normalizedUrl: input.normalizedUrl,
+      kind: input.kind,
+      label: input.label ?? null,
+    })
+    .returning();
+  return row;
+}
+
+export async function getMonitorByUrl(normalizedUrl: string): Promise<MonitorRow | null> {
+  const { db } = await getDb();
+  const rows = await db
+    .select()
+    .from(monitors)
+    .where(eq(monitors.normalizedUrl, normalizedUrl))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function getMonitorById(id: string): Promise<MonitorRow | null> {
+  const { db } = await getDb();
+  const rows = await db.select().from(monitors).where(eq(monitors.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listMonitors(): Promise<MonitorRow[]> {
+  const { db } = await getDb();
+  return db.select().from(monitors).orderBy(desc(monitors.createdAt));
+}
+
+export async function updateMonitor(id: string, patch: UpdateMonitorPatch): Promise<void> {
+  const { db } = await getDb();
+  await db
+    .update(monitors)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(monitors.id, id));
+}
+
+export async function deleteMonitor(id: string): Promise<void> {
+  const { db } = await getDb();
+  await db.delete(monitors).where(eq(monitors.id, id));
 }

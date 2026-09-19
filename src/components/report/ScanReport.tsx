@@ -10,15 +10,24 @@ import { CategoryBreakdown } from "./CategoryBreakdown";
 import { ExecutiveSummary } from "./ExecutiveSummary";
 import { FindingList } from "./FindingList";
 import { MethodologyNote } from "./MethodologyNote";
+import { MonitorPanel } from "./MonitorPanel";
 import { PassedChecks } from "./PassedChecks";
 import { ReportHero } from "./ReportHero";
 import { ScanHistory } from "./ScanHistory";
 import { SeoSnapshot } from "./SeoSnapshot";
 import { Suggestions } from "./Suggestions";
 
-export function ScanReport({ scan, history }: { scan: ScanDto; history: ScanHistoryData }) {
+export function ScanReport({
+  scan,
+  history,
+  monitored,
+}: {
+  scan: ScanDto;
+  history: ScanHistoryData;
+  monitored: boolean;
+}) {
   if (scan.kind !== "website") {
-    return <AppReport scan={scan} history={history} />;
+    return <AppReport scan={scan} history={history} monitored={monitored} />;
   }
 
   const analyzedUrl = scan.finalUrl ?? scan.normalizedUrl;
@@ -29,7 +38,8 @@ export function ScanReport({ scan, history }: { scan: ScanDto; history: ScanHist
     <div className="mx-auto w-full max-w-4xl px-5 py-12 sm:px-8 sm:py-16">
       <ReportHero scan={scan} host={host} analyzedUrl={analyzedUrl} score={score} />
       <ExecutiveSummary scan={scan} />
-      <ScanHistory history={history} />
+      <ScanHistory history={history} currentId={scan.id} />
+      <MonitorPanel url={scan.normalizedUrl} initiallyMonitored={monitored} />
       <ActionPlan findings={scan.findings} />
       <FindingList findings={scan.findings} />
       <SeoSnapshot seo={scan.insights?.seo ?? null} />

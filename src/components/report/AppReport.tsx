@@ -9,18 +9,28 @@ import { CategoryBreakdown } from "./CategoryBreakdown";
 import { ExecutiveSummary } from "./ExecutiveSummary";
 import { FindingList } from "./FindingList";
 import { MethodologyNote } from "./MethodologyNote";
+import { MonitorPanel } from "./MonitorPanel";
 import { PassedChecks } from "./PassedChecks";
 import { ScanHistory } from "./ScanHistory";
 import { Suggestions } from "./Suggestions";
 
-export function AppReport({ scan, history }: { scan: ScanDto; history: ScanHistoryData }) {
+export function AppReport({
+  scan,
+  history,
+  monitored,
+}: {
+  scan: ScanDto;
+  history: ScanHistoryData;
+  monitored: boolean;
+}) {
   const score = scan.score ?? 0;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-5 py-12 sm:px-8 sm:py-16">
       <AppHero scan={scan} score={score} />
       <ExecutiveSummary scan={scan} />
-      <ScanHistory history={history} />
+      <ScanHistory history={history} currentId={scan.id} />
+      <MonitorPanel url={scan.normalizedUrl} initiallyMonitored={monitored} />
       <ActionPlan findings={scan.findings} />
       <FindingList findings={scan.findings} />
       <Suggestions suggestions={scan.insights?.suggestions ?? []} />
