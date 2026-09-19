@@ -8,6 +8,7 @@ import { disposeDb } from "@/lib/db/client";
 import { GOOD_HEADERS, GOOD_PAGE_HTML, LEAKY_PAGE_HTML } from "./__fixtures__/pages";
 import { sendDigestForMonitor } from "./digest";
 import { loadScanHistory } from "./history";
+import { retryNotification } from "./notifications";
 import { createScan, runScan } from "./orchestrator";
 import {
   createMonitor,
@@ -15,6 +16,7 @@ import {
   getFindingsForScan,
   getMonitorById,
   getMonitorByUrl,
+  getNotificationById,
   getNotificationsForMonitor,
   getScanById,
   getScansForUrl,
@@ -242,7 +244,7 @@ describe("scan orchestrator (end to end, local fixture server)", () => {
     const current = await getMonitorById(monitor.id);
     const result = await sendDigestForMonitor(current!, {
       deliverEmail: async (message) => {
-        recipients.push(message.to);
+        recipients.push(...(Array.isArray(message.to) ? message.to : [message.to]));
         return { ok: true, status: 202, detail: "http_202" };
       },
       baseUrl: "https://leakfix.test",
@@ -252,6 +254,40 @@ describe("scan orchestrator (end to end, local fixture server)", () => {
     expect(recipients).toEqual(["ops@example.test"]);
     const entries = await getNotificationsForMonitor(monitor.id, 5);
     expect(entries.some((entry) => entry.channel === "digest" && entry.status === "sent")).toBe(true);
+
+    await deleteMonitor(monitor.id);
+  });
+
+  it("retries a failed notification using its stored payload", async () => {
+    const url = `${baseUrl}/good`;
+    const monitor = await createMonitor({ normalizedUrl: url, kind: "website", label: "Retry" });
+    await updateMonitor(monitor.id, {
+      notifyWebhookUrl: `${baseUrl}/missing`,
+      notifyPolicy: "always",
+    });
+
+    await runFullScan("/good");
+
+    const entries = await getNotificationsForMonitor(monitor.id, 5);
+    const failed = entries.find((entry) => entry.channel === "webhook" && entry.status === "failed");
+    expect(failed).toBeTruthy();
+    expect(failed?.payload).toBeTruthy();
+
+    let received: unknown = null;
+    const delivery = await retryNotification(failed!.id, {
+      signPayload: false,
+      deliverWebhook: async (_url, payload) => {
+        received = payload;
+        return { ok: true, status: 200, detail: "http_200" };
+      },
+    });
+
+    expect(delivery?.status).toBe("sent");
+    expect(received).toBeTruthy();
+
+    const after = await getNotificationById(failed!.id);
+    expect(after?.status).toBe("sent");
+    expect(after?.attempts).toBe(2);
 
     await deleteMonitor(monitor.id);
   });

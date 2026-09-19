@@ -143,6 +143,15 @@ export function planDigest(input: {
   };
 }
 
+/** Digest recipients: the explicit list, falling back to the alert email. */
+export function digestRecipients(monitor: MonitorRow): string[] {
+  const list = (monitor.digestRecipients ?? []).filter(
+    (entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+  );
+  if (list.length > 0) return list;
+  return monitor.notifyEmail ? [monitor.notifyEmail] : [];
+}
+
 function windowStart(monitor: MonitorRow, now: Date): Date {
   if (monitor.lastDigestAt) return monitor.lastDigestAt;
   const frequency = isDigestFrequency(monitor.digestFrequency) ? monitor.digestFrequency : "off";
@@ -171,7 +180,8 @@ export async function sendDigestForMonitor(
   monitor: MonitorRow,
   deps: DigestDeps = {},
 ): Promise<DigestDelivery[]> {
-  if (!monitor.notifyEmail) return [];
+  const recipients = digestRecipients(monitor);
+  if (recipients.length === 0) return [];
 
   const now = deps.now ?? new Date();
   const start = windowStart(monitor, now);
@@ -206,17 +216,18 @@ export async function sendDigestForMonitor(
   });
   if (!plan) return [];
 
-  const send = deps.deliverEmail ?? sendEmail;
-  const outcome: EmailOutcome = await send({
-    to: monitor.notifyEmail,
+  const message = {
+    to: recipients,
     subject: plan.subject,
     text: plan.text,
     html: plan.html,
-  });
+  };
+  const send = deps.deliverEmail ?? sendEmail;
+  const outcome: EmailOutcome = await send(message);
 
   const delivery: DigestDelivery = {
     channel: "digest",
-    target: monitor.notifyEmail,
+    target: recipients.join(", "),
     status: outcome.ok ? "sent" : outcome.detail === "email_not_configured" ? "skipped" : "failed",
     detail: outcome.detail,
   };
@@ -228,6 +239,7 @@ export async function sendDigestForMonitor(
     target: delivery.target,
     status: delivery.status,
     detail: delivery.detail,
+    payload: message as unknown as Record<string, unknown>,
   });
 
   if (outcome.ok) {
@@ -256,7 +268,7 @@ export async function runDigests(deps: DigestDeps = {}): Promise<DigestRunSummar
 
   for (const monitor of monitors) {
     const frequency = isDigestFrequency(monitor.digestFrequency) ? monitor.digestFrequency : "off";
-    if (!monitor.active || frequency === "off" || !monitor.notifyEmail) continue;
+    if (!monitor.active || frequency === "off" || digestRecipients(monitor).length === 0) continue;
     if (!isDigestDue(frequency, monitor.lastDigestAt, now)) continue;
 
     summary.checked += 1;

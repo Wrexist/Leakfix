@@ -51,10 +51,12 @@ CREATE TABLE IF NOT EXISTS monitors (
   last_scanned_at timestamptz,
   notify_webhook_url text,
   notify_email text,
+  webhook_secret text,
   notify_policy text NOT NULL DEFAULT 'drop',
   last_notified_at timestamptz,
   last_notified_score integer,
   digest_frequency text NOT NULL DEFAULT 'off',
+  digest_recipients jsonb,
   last_digest_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
@@ -71,7 +73,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   status text NOT NULL,
   detail text,
   attempts integer NOT NULL DEFAULT 1,
-  created_at timestamptz NOT NULL DEFAULT now()
+  payload jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS notifications_monitor_id_idx ON notifications (monitor_id);
@@ -88,6 +92,10 @@ ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_policy text NOT NULL DEFAUL
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_notified_at timestamptz;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_notified_score integer;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS digest_frequency text NOT NULL DEFAULT 'off';
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS digest_recipients jsonb;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_digest_at timestamptz;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS webhook_secret text;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 1;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS payload jsonb;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 `;

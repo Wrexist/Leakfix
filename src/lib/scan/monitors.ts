@@ -16,10 +16,12 @@ export interface MonitorDto {
   lastScannedAt: string | null;
   notifyWebhookUrl: string | null;
   notifyEmail: string | null;
+  webhookSecret: string | null;
   notifyPolicy: string;
   lastNotifiedAt: string | null;
   lastNotifiedScore: number | null;
   digestFrequency: string;
+  digestRecipients: string[];
   lastDigestAt: string | null;
   createdAt: string;
 }
@@ -37,10 +39,12 @@ export function toMonitorDto(row: MonitorRow): MonitorDto {
     lastScannedAt: row.lastScannedAt ? row.lastScannedAt.toISOString() : null,
     notifyWebhookUrl: row.notifyWebhookUrl,
     notifyEmail: row.notifyEmail,
+    webhookSecret: row.webhookSecret,
     notifyPolicy: isNotifyPolicy(row.notifyPolicy) ? row.notifyPolicy : "drop",
     lastNotifiedAt: row.lastNotifiedAt ? row.lastNotifiedAt.toISOString() : null,
     lastNotifiedScore: row.lastNotifiedScore,
     digestFrequency: isDigestFrequency(row.digestFrequency) ? row.digestFrequency : "off",
+    digestRecipients: Array.isArray(row.digestRecipients) ? row.digestRecipients : [],
     lastDigestAt: row.lastDigestAt ? row.lastDigestAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   };

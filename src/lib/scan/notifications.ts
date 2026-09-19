@@ -5,12 +5,16 @@ import { sendEmail, type EmailMessage, type EmailOutcome } from "./email";
 import { monitorLabel } from "./monitors";
 import { isNotifyPolicy, type NotifyPolicy } from "./notify-policy";
 import {
+  ensureWebhookSecret,
   getFindingsForScan,
+  getMonitorById,
   getMonitorByUrl,
+  getNotificationById,
   getScanById,
   getScansForUrl,
   insertNotification,
   updateMonitor,
+  updateNotification,
 } from "./repository";
 import { sendWebhook, sendWebhookWithRetry, type DeliveryOutcome } from "./webhook";
 
@@ -163,6 +167,8 @@ export interface NotifyDeps {
   deliverEmail?: typeof sendEmail;
   allowPrivate?: boolean;
   baseUrl?: string;
+  /** Set false to disable HMAC signing (tests). Defaults to signing. */
+  signPayload?: boolean;
 }
 
 function webhookHost(url: string | null): string {
@@ -294,8 +300,10 @@ async function dispatch(
   if (monitor.notifyWebhookUrl) {
     const send = deps.deliverWebhook ?? sendWebhookWithRetry;
     const payload = buildWebhookPayload(plan, monitor);
+    const signingSecret = deps.signPayload === false ? null : await ensureWebhookSecret(monitor);
     const outcome: DeliveryOutcome = await send(monitor.notifyWebhookUrl, payload, {
       allowPrivate: deps.allowPrivate,
+      signingSecret,
     });
     const attempts = (outcome as { attempts?: number }).attempts ?? 1;
     const delivery: NotificationDelivery = {
@@ -313,6 +321,7 @@ async function dispatch(
       status: delivery.status,
       detail: delivery.detail,
       attempts,
+      payload,
     });
   }
 
@@ -339,10 +348,62 @@ async function dispatch(
       target: delivery.target,
       status: delivery.status,
       detail: delivery.detail,
+      payload: message as unknown as Record<string, unknown>,
     });
   }
 
   return deliveries;
+}
+
+/**
+ * Retries a failed (or skipped) notification using its stored payload. Webhook
+ * payloads are re-signed with the monitor's current secret.
+ */
+export async function retryNotification(
+  notificationId: string,
+  deps: NotifyDeps = {},
+): Promise<NotificationDelivery | null> {
+  const notification = await getNotificationById(notificationId);
+  if (!notification) return null;
+
+  let delivery: NotificationDelivery | null = null;
+
+  if (notification.channel === "webhook") {
+    const monitor = await getMonitorById(notification.monitorId);
+    if (!monitor?.notifyWebhookUrl || !notification.payload) return null;
+    const send = deps.deliverWebhook ?? sendWebhookWithRetry;
+    const signingSecret = deps.signPayload === false ? null : await ensureWebhookSecret(monitor);
+    const outcome: DeliveryOutcome = await send(monitor.notifyWebhookUrl, notification.payload, {
+      allowPrivate: deps.allowPrivate,
+      signingSecret,
+    });
+    const attempts = (outcome as { attempts?: number }).attempts ?? 1;
+    delivery = {
+      channel: "webhook",
+      target: notification.target,
+      status: outcome.ok ? "sent" : "failed",
+      detail: attempts > 1 ? `${outcome.detail} (${attempts} attempts)` : outcome.detail,
+    };
+  } else if (notification.channel === "email" || notification.channel === "digest") {
+    if (!notification.payload) return null;
+    const send = deps.deliverEmail ?? sendEmail;
+    const outcome: EmailOutcome = await send(notification.payload as unknown as EmailMessage);
+    delivery = {
+      channel: notification.channel as NotificationChannel,
+      target: notification.target,
+      status: outcome.ok ? "sent" : outcome.detail === "email_not_configured" ? "skipped" : "failed",
+      detail: outcome.detail,
+    };
+  }
+
+  if (!delivery) return null;
+
+  await updateNotification(notification.id, {
+    status: delivery.status,
+    detail: delivery.detail,
+    attempts: notification.attempts + 1,
+  });
+  return delivery;
 }
 
 /**

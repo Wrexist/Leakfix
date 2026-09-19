@@ -1,12 +1,35 @@
 import { describe, expect, it } from "vitest";
 
-import { planDigest, type DigestScan } from "./digest";
+import { digestRecipients, planDigest, type DigestScan } from "./digest";
 
 const scans: DigestScan[] = [
   { id: "s1", score: 60, createdAt: new Date("2026-09-12T09:00:00Z") },
   { id: "s2", score: 55, createdAt: new Date("2026-09-15T09:00:00Z") },
   { id: "s3", score: 71, createdAt: new Date("2026-09-18T09:00:00Z") },
 ];
+
+describe("digestRecipients", () => {
+  const base = {
+    notifyEmail: "owner@example.test",
+    digestRecipients: ["a@example.test", "b@example.test"],
+  };
+
+  it("prefers the explicit recipient list", () => {
+    expect(digestRecipients(base as never)).toEqual(["a@example.test", "b@example.test"]);
+  });
+
+  it("falls back to the alert email", () => {
+    expect(digestRecipients({ ...base, digestRecipients: null } as never)).toEqual([
+      "owner@example.test",
+    ]);
+  });
+
+  it("ignores blank entries and missing email", () => {
+    expect(
+      digestRecipients({ notifyEmail: null, digestRecipients: ["  ", ""] } as never),
+    ).toEqual([]);
+  });
+});
 
 describe("planDigest", () => {
   it("returns null with no scans", () => {

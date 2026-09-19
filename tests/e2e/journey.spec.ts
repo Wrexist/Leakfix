@@ -106,8 +106,15 @@ test("monitors a target", async ({ page }) => {
   await page.getByText("Notifications").first().click();
   await page.locator("input[id^='notify-webhook-']").fill(`${FIXTURE_ORIGIN}/hook`);
   await page.locator("input[id^='notify-email-']").fill("ops@example.test");
+  await page
+    .locator("input[id^='notify-recipients-']")
+    .fill("ops@example.test, founder@example.test");
   await page.locator("select[id^='notify-policy-']").selectOption("always");
   await page.locator("select[id^='notify-digest-']").selectOption("weekly");
+
+  // A signing secret is generated automatically for the monitor.
+  await expect(page.locator("code", { hasText: "whsec_" }).first()).toBeVisible();
+
   await page.getByRole("button", { name: /^save$/i }).click();
   await expect(page.getByText(/notification settings saved/i)).toBeVisible({ timeout: 15_000 });
 

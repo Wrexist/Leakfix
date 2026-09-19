@@ -17,6 +17,7 @@ const patchSchema = z.object({
   email: z.string().trim().max(254).optional(),
   notifyPolicy: z.enum(["drop", "change", "always"]).optional(),
   digestFrequency: z.enum(["off", "daily", "weekly"]).optional(),
+  digestRecipients: z.array(z.string().trim().max(254)).max(20).optional(),
   active: z.boolean().optional(),
   label: z.string().trim().max(120).nullable().optional(),
 });
@@ -104,6 +105,18 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     } else {
       patch.notifyEmail = value;
     }
+  }
+
+  if (data.digestRecipients !== undefined) {
+    const recipients = data.digestRecipients.map((entry) => entry.trim()).filter(Boolean);
+    const invalid = recipients.find((entry) => !EMAIL_PATTERN.test(entry));
+    if (invalid) {
+      return NextResponse.json(
+        { error: { code: "INVALID_EMAIL", message: `Digest recipient: ${invalid} is not a valid email.` } },
+        { status: 400 },
+      );
+    }
+    patch.digestRecipients = recipients.length > 0 ? recipients : null;
   }
 
   if (data.notifyPolicy !== undefined) patch.notifyPolicy = data.notifyPolicy;

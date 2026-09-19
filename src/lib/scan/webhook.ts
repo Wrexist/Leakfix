@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { resolveAndValidateHost } from "./fetcher";
 import { validateUrlInput } from "./url";
 
@@ -9,6 +11,37 @@ export interface DeliveryOutcome {
 
 const USER_AGENT = "LeakFixBot/0.1 (+https://leakfix.example/bot)";
 
+/** HMAC-SHA256 of `timestamp.body`, hex encoded (Stripe-style scheme). */
+export function signPayload(secret: string, timestamp: string | number, body: string): string {
+  return createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");
+}
+
+export interface WebhookRequest {
+  body: string;
+  headers: Record<string, string>;
+}
+
+/** Builds the exact body and headers sent to a webhook (exported for tests). */
+export function buildWebhookRequest(
+  payload: unknown,
+  options: { signingSecret?: string | null; timestamp?: number; userAgent?: string } = {},
+): WebhookRequest {
+  const body = JSON.stringify(payload);
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "user-agent": options.userAgent ?? USER_AGENT,
+    "x-leakfix-event": "monitor.change",
+  };
+
+  if (options.signingSecret) {
+    const timestamp = String(options.timestamp ?? Math.floor(Date.now() / 1000));
+    headers["x-leakfix-timestamp"] = timestamp;
+    headers["x-leakfix-signature"] = `sha256=${signPayload(options.signingSecret, timestamp, body)}`;
+  }
+
+  return { body, headers };
+}
+
 /**
  * Sends a JSON webhook with the same network-target policy as the scanner:
  * https only (unless explicitly allowed for tests), DNS re-validation, and
@@ -18,7 +51,7 @@ const USER_AGENT = "LeakFixBot/0.1 (+https://leakfix.example/bot)";
 export async function sendWebhook(
   url: string,
   payload: unknown,
-  options: { allowPrivate?: boolean; timeoutMs?: number } = {},
+  options: { allowPrivate?: boolean; timeoutMs?: number; signingSecret?: string | null } = {},
 ): Promise<DeliveryOutcome> {
   const allowPrivate = options.allowPrivate ?? false;
   const timeoutMs = options.timeoutMs ?? 8000;
@@ -36,13 +69,15 @@ export async function sendWebhook(
     return { ok: false, status: null, detail: `blocked_${hostCheck.code}` };
   }
 
+  const request = buildWebhookRequest(payload, { signingSecret: options.signingSecret });
+
   try {
     const response = await fetch(validation.target.href, {
       method: "POST",
       redirect: "manual",
       signal: AbortSignal.timeout(timeoutMs),
-      headers: { "content-type": "application/json", "user-agent": USER_AGENT },
-      body: JSON.stringify(payload),
+      headers: request.headers,
+      body: request.body,
     });
     await response.body?.cancel().catch(() => undefined);
     return {
@@ -65,6 +100,7 @@ export interface WebhookRetryOptions {
   timeoutMs?: number;
   attempts?: number;
   baseDelayMs?: number;
+  signingSecret?: string | null;
   /** Injectable for tests; defaults to a real timer. */
   sleep?: (ms: number) => Promise<void>;
   /** Injectable for tests; defaults to the real sender. */
@@ -99,6 +135,7 @@ export async function sendWebhookWithRetry(
     outcome = await send(url, payload, {
       allowPrivate: options.allowPrivate,
       timeoutMs: options.timeoutMs,
+      signingSecret: options.signingSecret,
     });
     if (outcome.ok || !isRetryable(outcome) || attempt === attemptsAllowed) {
       return { ...outcome, attempts: attempt };

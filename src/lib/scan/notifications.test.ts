@@ -1,9 +1,11 @@
+import { createHmac } from "node:crypto";
+
 import { describe, expect, it } from "vitest";
 
 import type { MonitorRow } from "@/lib/db/schema";
 
 import { buildWebhookPayload, planNotification, shouldNotify } from "./notifications";
-import { sendWebhook, sendWebhookWithRetry } from "./webhook";
+import { buildWebhookRequest, sendWebhook, sendWebhookWithRetry, signPayload } from "./webhook";
 
 function monitor(overrides: Partial<MonitorRow> = {}): MonitorRow {
   return {
@@ -18,10 +20,12 @@ function monitor(overrides: Partial<MonitorRow> = {}): MonitorRow {
     lastScannedAt: new Date("2026-09-19T09:00:00Z"),
     notifyWebhookUrl: "https://example.com/hook",
     notifyEmail: null,
+    webhookSecret: "whsec_test",
     notifyPolicy: "drop",
     lastNotifiedAt: null,
     lastNotifiedScore: null,
     digestFrequency: "off",
+    digestRecipients: null,
     lastDigestAt: null,
     createdAt: new Date("2026-09-01T09:00:00Z"),
     updatedAt: new Date("2026-09-19T09:00:00Z"),
@@ -142,6 +146,30 @@ describe("buildWebhookPayload", () => {
     expect(payload.embeds).toBeUndefined();
     expect(payload.delta).toBe(-10);
     expect(Array.isArray(payload.newIssues)).toBe(true);
+  });
+});
+
+describe("webhook signing", () => {
+  it("signs the body with the timestamp (Stripe-style)", () => {
+    const request = buildWebhookRequest({ a: 1 }, { signingSecret: "whsec_test", timestamp: 1700000000 });
+    const expected = createHmac("sha256", "whsec_test")
+      .update(`1700000000.${request.body}`)
+      .digest("hex");
+    expect(request.headers["x-leakfix-timestamp"]).toBe("1700000000");
+    expect(request.headers["x-leakfix-signature"]).toBe(`sha256=${expected}`);
+    expect(request.headers["x-leakfix-event"]).toBe("monitor.change");
+  });
+
+  it("omits the signature when no secret is configured", () => {
+    const request = buildWebhookRequest({ a: 1 }, {});
+    expect(request.headers["x-leakfix-signature"]).toBeUndefined();
+    expect(request.headers["x-leakfix-timestamp"]).toBeUndefined();
+  });
+
+  it("signPayload matches a manual HMAC", () => {
+    expect(signPayload("s", "123", "body")).toBe(
+      createHmac("sha256", "s").update("123.body").digest("hex"),
+    );
   });
 });
 

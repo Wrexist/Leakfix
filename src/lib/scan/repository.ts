@@ -13,6 +13,7 @@ import {
 } from "@/lib/db/schema";
 
 import type { ScanInsights } from "./insights/types";
+import { generateWebhookSecret } from "./secrets";
 import type { ScanStatus } from "./state";
 import type { AuditSummary, Finding, ScanKind, ScanSubject } from "./types";
 
@@ -110,10 +111,12 @@ export interface UpdateMonitorPatch {
   scanCount?: number;
   notifyWebhookUrl?: string | null;
   notifyEmail?: string | null;
+  webhookSecret?: string | null;
   notifyPolicy?: string;
   lastNotifiedAt?: Date | null;
   lastNotifiedScore?: number | null;
   digestFrequency?: string;
+  digestRecipients?: string[] | null;
   lastDigestAt?: Date | null;
 }
 
@@ -129,9 +132,24 @@ export async function createMonitor(input: {
       normalizedUrl: input.normalizedUrl,
       kind: input.kind,
       label: input.label ?? null,
+      webhookSecret: generateWebhookSecret(),
     })
     .returning();
   return row;
+}
+
+/** Ensures a monitor has a webhook signing secret, generating one if needed. */
+export async function ensureWebhookSecret(monitor: MonitorRow): Promise<string> {
+  if (monitor.webhookSecret) return monitor.webhookSecret;
+  const secret = generateWebhookSecret();
+  await updateMonitor(monitor.id, { webhookSecret: secret });
+  return secret;
+}
+
+export async function rotateWebhookSecret(monitorId: string): Promise<string> {
+  const secret = generateWebhookSecret();
+  await updateMonitor(monitorId, { webhookSecret: secret });
+  return secret;
 }
 
 export async function getMonitorByUrl(normalizedUrl: string): Promise<MonitorRow | null> {
@@ -176,6 +194,7 @@ export async function insertNotification(input: {
   status: string;
   detail?: string | null;
   attempts?: number;
+  payload?: Record<string, unknown> | null;
 }): Promise<NotificationRow> {
   const { db } = await getDb();
   const [row] = await db
@@ -188,9 +207,27 @@ export async function insertNotification(input: {
       status: input.status,
       detail: input.detail ?? null,
       attempts: input.attempts ?? 1,
+      payload: input.payload ?? null,
     })
     .returning();
   return row;
+}
+
+export async function getNotificationById(id: string): Promise<NotificationRow | null> {
+  const { db } = await getDb();
+  const rows = await db.select().from(notifications).where(eq(notifications.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function updateNotification(
+  id: string,
+  patch: { status?: string; detail?: string | null; attempts?: number },
+): Promise<void> {
+  const { db } = await getDb();
+  await db
+    .update(notifications)
+    .set({ ...patch, updatedAt: new Date() })
+    .where(eq(notifications.id, id));
 }
 
 export async function getNotificationsForMonitor(

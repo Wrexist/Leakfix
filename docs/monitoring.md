@@ -103,6 +103,41 @@ The payload adapts to the destination host:
 
 Slack and Discord also receive `text` so any client renders something readable.
 
+### Verifying webhook signatures
+
+Every webhook is signed with a per-monitor secret (`whsec_…`), shown on
+`/monitors` and rotatable at any time. Two headers are sent:
+
+- `X-LeakFix-Timestamp` — Unix seconds.
+- `X-LeakFix-Signature` — `sha256=<hex HMAC-SHA256 of "<timestamp>.<rawBody>">`.
+
+Verify against the **raw** request body (before any JSON re-serialisation) and use
+a constant-time comparison:
+
+```js
+const crypto = require("node:crypto");
+const ts = req.headers["x-leakfix-timestamp"];
+const signature = req.headers["x-leakfix-signature"] ?? "";
+const expected =
+  "sha256=" +
+  crypto.createHmac("sha256", process.env.LEAKFIX_WEBHOOK_SECRET)
+    .update(`${ts}.${rawBody}`)
+    .digest("hex");
+const valid =
+  signature.length === expected.length &&
+  crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
+```
+
+If you rotate the secret, update the receiver before the next delivery.
+
+### Retrying deliveries
+
+Transient failures retry automatically (see above). Any delivery that still fails
+— for example a `4xx`, an outage, or an email provider error — is kept with its
+payload, and a **Retry** action appears next to it in the activity list. Retrying
+re-sends the exact stored payload, re-signed with the monitor's current secret,
+and updates the same row (status, detail, and attempt count).
+
 ### Why this is safe
 
 Webhook URLs are attacker-controllable, so they go through the same network
@@ -140,6 +175,8 @@ start and end of the period, the delta, how many scans ran, and the new and fixe
 issues, with links to the report and the comparison.
 
 - Configure it on `/monitors` under **Notifications → Email digest**.
+- **Digest recipients** accepts a comma-separated list of addresses. When empty it
+  falls back to the single alert email.
 - Send one immediately with **Send digest now**.
 - Send all due digests on a schedule:
 

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { MonitorForm } from "@/components/monitors/MonitorForm";
 import { MonitorNotifyForm } from "@/components/monitors/MonitorNotifyForm";
 import { MonitorRowActions } from "@/components/monitors/MonitorRowActions";
+import { NotificationRetry } from "@/components/monitors/NotificationRetry";
 import { ScoreTrend, type TrendPoint } from "@/components/report/ScoreTrend";
 import { emailConfigured } from "@/lib/scan/email";
 import { monitorLabel, toMonitorDto } from "@/lib/scan/monitors";
@@ -181,6 +182,8 @@ export default async function MonitorsPage() {
                     email={dto.notifyEmail}
                     policy={policy}
                     digestFrequency={digestFrequency}
+                    digestRecipients={dto.digestRecipients}
+                    webhookSecret={dto.webhookSecret}
                     emailEnabled={emailEnabled}
                   />
 
@@ -191,20 +194,25 @@ export default async function MonitorsPage() {
                       </h3>
                       <ul className="mt-2 space-y-1.5">
                         {notifications.map((entry) => (
-                          <li key={entry.id} className="text-xs text-ink-faint">
-                            {formatDate(entry.createdAt.toISOString())} · {entry.channel} ·{" "}
-                            <span
-                              className={
-                                entry.status === "sent"
-                                  ? "text-positive"
-                                  : entry.status === "failed"
-                                    ? "text-red-600"
-                                    : ""
-                              }
-                            >
-                              {entry.status}
-                            </span>{" "}
-                            · {entry.detail}
+                          <li key={entry.id} className="flex flex-wrap items-center gap-2 text-xs text-ink-faint">
+                            <span>
+                              {formatDate(entry.createdAt.toISOString())} · {entry.channel} ·{" "}
+                              <span
+                                className={
+                                  entry.status === "sent"
+                                    ? "text-positive"
+                                    : entry.status === "failed"
+                                      ? "text-red-600"
+                                      : ""
+                                }
+                              >
+                                {entry.status}
+                              </span>{" "}
+                              · {entry.detail}
+                            </span>
+                            {entry.status !== "sent" ? (
+                              <NotificationRetry monitorId={dto.id} notificationId={entry.id} />
+                            ) : null}
                           </li>
                         ))}
                       </ul>

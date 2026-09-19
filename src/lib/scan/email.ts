@@ -5,7 +5,7 @@ export interface EmailOutcome {
 }
 
 export interface EmailMessage {
-  to: string;
+  to: string | string[];
   subject: string;
   text: string;
   html: string;
@@ -42,7 +42,7 @@ export async function sendEmail(
       },
       body: JSON.stringify({
         from,
-        to: [message.to],
+        to: Array.isArray(message.to) ? message.to : [message.to],
         subject: message.subject,
         text: message.text,
         html: message.html,

@@ -61,10 +61,12 @@ slice: homepage → scan → persisted results → polished, tabbed report.
   diff any two scans on `/compare?a=…&b=…`.
 - **Change notifications**: per-monitor webhook (Slack Block Kit / Discord
   embeds / generic JSON) and email alerts when the score drops, changes, or after
-  every scan, with automatic retry/backoff, a test button, and a delivery log.
-- **Scheduled digests**: daily or weekly email summaries per monitor via
-  `GET|POST /api/cron/digest`, with a manual “Send digest now”. See
-  [docs/monitoring.md](docs/monitoring.md).
+  every scan, with automatic retry/backoff, **HMAC-signed payloads** (rotatable
+  secret), a test button, and a delivery log. Failed deliveries keep their payload
+  and can be **retried** in one click.
+- **Scheduled digests**: daily or weekly email summaries per monitor with a
+  multi-address recipient list, via `GET|POST /api/cron/digest`, plus a manual
+  “Send digest now”. See [docs/monitoring.md](docs/monitoring.md).
 - An **explicit scan state machine** (`queued → fetching → analyzing →
   completed | failed`) persisted in the database and reflected in the UI.
 - **Transparent scoring** (see [docs/architecture.md](docs/architecture.md)).

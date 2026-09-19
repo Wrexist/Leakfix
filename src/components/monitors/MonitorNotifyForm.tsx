@@ -2,6 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 
+import { CopyButton } from "@/components/report/CopyButton";
 import {
   DIGEST_FREQUENCIES,
   DIGEST_FREQUENCY_LABEL,
@@ -20,7 +21,14 @@ interface MonitorNotifyFormProps {
   email: string | null;
   policy: NotifyPolicy;
   digestFrequency: string;
+  digestRecipients: string[];
+  webhookSecret: string | null;
   emailEnabled: boolean;
+}
+
+function maskSecret(secret: string): string {
+  if (secret.length <= 16) return secret;
+  return `${secret.slice(0, 11)}…${secret.slice(-4)}`;
 }
 
 export function MonitorNotifyForm({
@@ -29,6 +37,8 @@ export function MonitorNotifyForm({
   email,
   policy,
   digestFrequency,
+  digestRecipients,
+  webhookSecret,
   emailEnabled,
 }: MonitorNotifyFormProps) {
   const [webhook, setWebhook] = useState(webhookUrl ?? "");
@@ -37,7 +47,9 @@ export function MonitorNotifyForm({
   const [digest, setDigest] = useState<DigestFrequency>(
     isDigestFrequency(digestFrequency) ? digestFrequency : "off",
   );
-  const [busy, setBusy] = useState<"save" | "test" | "digest" | null>(null);
+  const [recipients, setRecipients] = useState(digestRecipients.join(", "));
+  const [secret, setSecret] = useState(webhookSecret);
+  const [busy, setBusy] = useState<"save" | "test" | "digest" | "rotate" | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -54,6 +66,10 @@ export function MonitorNotifyForm({
           email: mail,
           notifyPolicy: policyValue,
           digestFrequency: digest,
+          digestRecipients: recipients
+            .split(/[,\s]+/)
+            .map((entry) => entry.trim())
+            .filter(Boolean),
         }),
       });
       const payload = (await response.json().catch(() => null)) as
@@ -92,6 +108,28 @@ export function MonitorNotifyForm({
             ? deliveries.map((d) => `${d.channel}: ${d.status} (${d.detail})`).join(" · ")
             : "Nothing to summarise yet.",
       });
+    } catch {
+      setMessage({ tone: "error", text: "We couldn't reach the server. Try again." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function rotateSecret() {
+    if (busy) return;
+    setBusy("rotate");
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/monitors/${id}/secret`, { method: "POST" });
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: { message?: string }; webhookSecret?: string }
+        | null;
+      if (!response.ok || !payload?.webhookSecret) {
+        setMessage({ tone: "error", text: payload?.error?.message ?? "Could not rotate the secret." });
+        return;
+      }
+      setSecret(payload.webhookSecret);
+      setMessage({ tone: "ok", text: "New signing secret generated. Update your receiver." });
     } catch {
       setMessage({ tone: "error", text: "We couldn't reach the server. Try again." });
     } finally {
@@ -197,6 +235,42 @@ export function MonitorNotifyForm({
           Summarises scans since the last digest. Sent by the daily/weekly cron.
         </span>
       </label>
+
+      <label className="block text-sm sm:col-span-2">
+        <span className="font-medium text-ink">Digest recipients</span>
+        <input
+          id={`notify-recipients-${id}`}
+          type="text"
+          value={recipients}
+          onChange={(event) => setRecipients(event.target.value)}
+          placeholder="ops@example.com, founder@example.com"
+          className="mt-1 h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink outline-none focus-visible:border-brand"
+        />
+        <span className="mt-1 block text-xs text-ink-faint">
+          Comma-separated. Falls back to the email above when empty.
+        </span>
+      </label>
+
+      <div className="sm:col-span-2">
+        <span className="text-sm font-medium text-ink">Webhook signing secret</span>
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-xs text-ink-soft">
+            {secret ? maskSecret(secret) : "Save a webhook URL to generate a secret"}
+          </code>
+          {secret ? <CopyButton value={secret} label="Copy" /> : null}
+          <button
+            type="button"
+            onClick={rotateSecret}
+            disabled={busy !== null}
+            className="inline-flex h-10 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {busy === "rotate" ? "Rotating…" : "Rotate"}
+          </button>
+        </div>
+        <span className="mt-1 block text-xs text-ink-faint">
+          Each request is signed: <code className="font-mono">X-LeakFix-Signature: sha256=HMAC(secret, timestamp.body)</code>
+        </span>
+      </div>
 
       <div className="flex items-end gap-2">
         <button
