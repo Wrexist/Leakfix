@@ -104,13 +104,18 @@ test("monitors a target", async ({ page }) => {
 
   // Configure and test notifications.
   await page.getByText("Notifications").first().click();
-  await page.getByLabel("Webhook URL").fill(`${FIXTURE_ORIGIN}/hook`);
-  await page.getByLabel("Notify me").selectOption("always");
+  await page.locator("input[id^='notify-webhook-']").fill(`${FIXTURE_ORIGIN}/hook`);
+  await page.locator("input[id^='notify-email-']").fill("ops@example.test");
+  await page.locator("select[id^='notify-policy-']").selectOption("always");
+  await page.locator("select[id^='notify-digest-']").selectOption("weekly");
   await page.getByRole("button", { name: /^save$/i }).click();
   await expect(page.getByText(/notification settings saved/i)).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("button", { name: /send test/i }).click();
   await expect(page.getByText(/webhook: sent/i)).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: /send digest now/i }).click();
+  await expect(page.getByText(/digest: sent/i)).toBeVisible({ timeout: 15_000 });
 });
 
 test("compares two scans side by side", async ({ page }) => {

@@ -16,6 +16,7 @@ const patchSchema = z.object({
   webhookUrl: z.string().trim().max(2048).optional(),
   email: z.string().trim().max(254).optional(),
   notifyPolicy: z.enum(["drop", "change", "always"]).optional(),
+  digestFrequency: z.enum(["off", "daily", "weekly"]).optional(),
   active: z.boolean().optional(),
   label: z.string().trim().max(120).nullable().optional(),
 });
@@ -106,6 +107,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   if (data.notifyPolicy !== undefined) patch.notifyPolicy = data.notifyPolicy;
+  if (data.digestFrequency !== undefined) patch.digestFrequency = data.digestFrequency;
   if (data.active !== undefined) patch.active = data.active;
   if (data.label !== undefined) patch.label = data.label;
 

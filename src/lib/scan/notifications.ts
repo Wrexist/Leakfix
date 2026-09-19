@@ -12,7 +12,7 @@ import {
   insertNotification,
   updateMonitor,
 } from "./repository";
-import { sendWebhook, type DeliveryOutcome } from "./webhook";
+import { sendWebhook, sendWebhookWithRetry, type DeliveryOutcome } from "./webhook";
 
 export { isNotifyPolicy, NOTIFY_POLICIES, NOTIFY_POLICY_LABEL } from "./notify-policy";
 export type { NotifyPolicy } from "./notify-policy";
@@ -165,6 +165,124 @@ export interface NotifyDeps {
   baseUrl?: string;
 }
 
+function webhookHost(url: string | null): string {
+  if (!url) return "";
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function issueLines(findings: ComparedFinding[], limit = 5): string {
+  if (findings.length === 0) return "None";
+  return findings
+    .slice(0, limit)
+    .map((finding) => `• [${finding.severity}] ${finding.title}`)
+    .join("\n");
+}
+
+function scoreLine(plan: NotificationPlan): string {
+  return plan.previousScore == null || plan.score == null
+    ? `${plan.score ?? "—"}/100`
+    : `${plan.previousScore} → ${plan.score} (${formatDelta(plan.delta ?? 0)})`;
+}
+
+function slackBlocks(plan: NotificationPlan): unknown[] {
+  const blocks: unknown[] = [
+    { type: "header", text: { type: "plain_text", text: plan.subject, emoji: true } },
+    {
+      type: "section",
+      fields: [
+        { type: "mrkdwn", text: `*Score*\n${scoreLine(plan)}` },
+        { type: "mrkdwn", text: `*New / Fixed*\n${plan.added.length} / ${plan.fixed.length}` },
+      ],
+    },
+  ];
+  if (plan.added.length > 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*New issues*\n${issueLines(plan.added)}` },
+    });
+  }
+  if (plan.fixed.length > 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*Fixed*\n${issueLines(plan.fixed)}` },
+    });
+  }
+  const elements: unknown[] = [
+    { type: "button", text: { type: "plain_text", text: "View report" }, url: plan.reportUrl },
+  ];
+  if (plan.compareUrl) {
+    elements.push({ type: "button", text: { type: "plain_text", text: "Compare" }, url: plan.compareUrl });
+  }
+  blocks.push({ type: "actions", elements });
+  return blocks;
+}
+
+function discordEmbeds(plan: NotificationPlan, monitor: MonitorRow): unknown[] {
+  const color =
+    plan.delta != null && plan.delta < 0
+      ? 0xc0272d
+      : plan.delta != null && plan.delta > 0
+        ? 0x0f7a56
+        : 0x2f5bff;
+  return [
+    {
+      title: plan.subject,
+      url: plan.reportUrl,
+      description: `Score ${scoreLine(plan)}`,
+      color,
+      fields: [
+        { name: `New issues (${plan.added.length})`, value: issueLines(plan.added), inline: false },
+        { name: `Fixed (${plan.fixed.length})`, value: issueLines(plan.fixed), inline: false },
+      ],
+      footer: { text: monitorLabel(monitor) },
+    },
+  ];
+}
+
+/**
+ * Builds a provider-native payload when the webhook target is Slack or Discord,
+ * and a generic JSON payload otherwise. Exported for tests.
+ */
+export function buildWebhookPayload(
+  plan: NotificationPlan,
+  monitor: MonitorRow,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = {
+    text: plan.text,
+    content: plan.text,
+    subject: plan.subject,
+    monitor: { id: monitor.id, label: monitorLabel(monitor), url: monitor.normalizedUrl },
+    score: plan.score,
+    previousScore: plan.previousScore,
+    delta: plan.delta,
+    newIssues: plan.added.map((finding) => ({
+      ruleId: finding.ruleId,
+      title: finding.title,
+      severity: finding.severity,
+    })),
+    fixedIssues: plan.fixed.map((finding) => ({
+      ruleId: finding.ruleId,
+      title: finding.title,
+      severity: finding.severity,
+    })),
+    reportUrl: plan.reportUrl,
+    compareUrl: plan.compareUrl,
+  };
+
+  const host = webhookHost(monitor.notifyWebhookUrl);
+  if (host === "hooks.slack.com") {
+    return { ...base, blocks: slackBlocks(plan) };
+  }
+  if (host === "discord.com" || host === "discordapp.com" || host.endsWith(".discord.com")) {
+    return { ...base, embeds: discordEmbeds(plan, monitor) };
+  }
+  return base;
+}
+
 async function dispatch(
   monitor: MonitorRow,
   scanId: string | null,
@@ -174,28 +292,17 @@ async function dispatch(
   const deliveries: NotificationDelivery[] = [];
 
   if (monitor.notifyWebhookUrl) {
-    const send = deps.deliverWebhook ?? sendWebhook;
-    const payload = {
-      text: plan.text,
-      content: plan.text,
-      subject: plan.subject,
-      monitor: { id: monitor.id, label: monitorLabel(monitor), url: monitor.normalizedUrl },
-      score: plan.score,
-      previousScore: plan.previousScore,
-      delta: plan.delta,
-      newIssues: plan.added.map((finding) => ({ ruleId: finding.ruleId, title: finding.title, severity: finding.severity })),
-      fixedIssues: plan.fixed.map((finding) => ({ ruleId: finding.ruleId, title: finding.title, severity: finding.severity })),
-      reportUrl: plan.reportUrl,
-      compareUrl: plan.compareUrl,
-    };
+    const send = deps.deliverWebhook ?? sendWebhookWithRetry;
+    const payload = buildWebhookPayload(plan, monitor);
     const outcome: DeliveryOutcome = await send(monitor.notifyWebhookUrl, payload, {
       allowPrivate: deps.allowPrivate,
     });
+    const attempts = (outcome as { attempts?: number }).attempts ?? 1;
     const delivery: NotificationDelivery = {
       channel: "webhook",
       target: monitor.notifyWebhookUrl,
       status: outcome.ok ? "sent" : "failed",
-      detail: outcome.detail,
+      detail: attempts > 1 ? `${outcome.detail} (${attempts} attempts)` : outcome.detail,
     };
     deliveries.push(delivery);
     await insertNotification({
@@ -205,6 +312,7 @@ async function dispatch(
       target: delivery.target,
       status: delivery.status,
       detail: delivery.detail,
+      attempts,
     });
   }
 

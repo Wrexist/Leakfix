@@ -32,6 +32,10 @@ export default defineConfig({
       env: {
         DATABASE_DIR: "memory",
         LEAKFIX_ALLOW_PRIVATE_TARGETS: "true",
+        CRON_SECRET: "e2e-secret",
+        EMAIL_API_KEY: "e2e-key",
+        EMAIL_FROM: "LeakFix <alerts@leakfix.test>",
+        EMAIL_API_URL: `http://127.0.0.1:${FIXTURE_PORT}/email`,
       },
     },
   ],

@@ -7,6 +7,7 @@ import { MonitorRowActions } from "@/components/monitors/MonitorRowActions";
 import { ScoreTrend, type TrendPoint } from "@/components/report/ScoreTrend";
 import { emailConfigured } from "@/lib/scan/email";
 import { monitorLabel, toMonitorDto } from "@/lib/scan/monitors";
+import { isDigestFrequency } from "@/lib/scan/digest-policy";
 import { isNotifyPolicy } from "@/lib/scan/notify-policy";
 import {
   getNotificationsForMonitor,
@@ -88,6 +89,9 @@ export default async function MonitorsPage() {
             const compareHref =
               ids.length >= 2 ? `/compare?a=${ids[ids.length - 2]}&b=${ids[ids.length - 1]}` : null;
             const policy = isNotifyPolicy(dto.notifyPolicy) ? dto.notifyPolicy : "drop";
+            const digestFrequency = isDigestFrequency(dto.digestFrequency)
+              ? dto.digestFrequency
+              : "off";
             const channels = [
               dto.notifyWebhookUrl ? "webhook" : null,
               dto.notifyEmail ? "email" : null,
@@ -164,6 +168,7 @@ export default async function MonitorsPage() {
                     {channels ? (
                       <span className="ml-2 text-ink-faint">
                         {channels} · {policy === "drop" ? "on drop" : policy === "change" ? "on change" : "every scan"}
+                        {digestFrequency !== "off" ? ` · ${digestFrequency} digest` : ""}
                       </span>
                     ) : (
                       <span className="ml-2 text-ink-faint">not configured</span>
@@ -175,6 +180,7 @@ export default async function MonitorsPage() {
                     webhookUrl={dto.notifyWebhookUrl}
                     email={dto.notifyEmail}
                     policy={policy}
+                    digestFrequency={digestFrequency}
                     emailEnabled={emailEnabled}
                   />
 

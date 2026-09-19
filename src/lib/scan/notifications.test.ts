@@ -1,7 +1,33 @@
 import { describe, expect, it } from "vitest";
 
-import { planNotification, shouldNotify } from "./notifications";
-import { sendWebhook } from "./webhook";
+import type { MonitorRow } from "@/lib/db/schema";
+
+import { buildWebhookPayload, planNotification, shouldNotify } from "./notifications";
+import { sendWebhook, sendWebhookWithRetry } from "./webhook";
+
+function monitor(overrides: Partial<MonitorRow> = {}): MonitorRow {
+  return {
+    id: "monitor-1",
+    normalizedUrl: "https://example.com/",
+    kind: "website",
+    label: "Example",
+    active: true,
+    scanCount: 3,
+    lastScanId: "scan-2",
+    lastScore: 50,
+    lastScannedAt: new Date("2026-09-19T09:00:00Z"),
+    notifyWebhookUrl: "https://example.com/hook",
+    notifyEmail: null,
+    notifyPolicy: "drop",
+    lastNotifiedAt: null,
+    lastNotifiedScore: null,
+    digestFrequency: "off",
+    lastDigestAt: null,
+    createdAt: new Date("2026-09-01T09:00:00Z"),
+    updatedAt: new Date("2026-09-19T09:00:00Z"),
+    ...overrides,
+  };
+}
 
 describe("shouldNotify", () => {
   it("only fires on a drop for the drop policy", () => {
@@ -75,6 +101,113 @@ describe("planNotification", () => {
     expect(plan?.text).toContain("New problem");
     expect(plan?.text).toContain("Old problem");
     expect(plan?.html).toContain("New problem");
+  });
+});
+
+describe("buildWebhookPayload", () => {
+  const plan = planNotification({
+    policy: "drop",
+    label: "Example",
+    url: "https://example.com/",
+    previousScore: 60,
+    score: 50,
+    added: [{ ruleId: "a", title: "New problem", severity: "high", category: "SEO" }],
+    fixed: [],
+    scanId: "scan-2",
+    previousId: "scan-1",
+    baseUrl: "https://leakfix.test",
+  })!;
+
+  it("adds Slack blocks for Slack webhooks", () => {
+    const payload = buildWebhookPayload(
+      plan,
+      monitor({ notifyWebhookUrl: "https://hooks.slack.com/services/abc" }),
+    );
+    expect(Array.isArray(payload.blocks)).toBe(true);
+    expect(payload.text).toBeTruthy();
+  });
+
+  it("adds Discord embeds for Discord webhooks", () => {
+    const payload = buildWebhookPayload(
+      plan,
+      monitor({ notifyWebhookUrl: "https://discord.com/api/webhooks/abc" }),
+    );
+    expect(Array.isArray(payload.embeds)).toBe(true);
+    expect(payload.blocks).toBeUndefined();
+  });
+
+  it("returns a generic payload for other endpoints", () => {
+    const payload = buildWebhookPayload(plan, monitor());
+    expect(payload.blocks).toBeUndefined();
+    expect(payload.embeds).toBeUndefined();
+    expect(payload.delta).toBe(-10);
+    expect(Array.isArray(payload.newIssues)).toBe(true);
+  });
+});
+
+describe("sendWebhookWithRetry", () => {
+  it("retries transient failures with backoff, then succeeds", async () => {
+    let calls = 0;
+    const sleeps: number[] = [];
+    const outcome = await sendWebhookWithRetry(
+      "https://example.com/hook",
+      {},
+      {
+        attempts: 3,
+        baseDelayMs: 100,
+        sleep: async (ms) => {
+          sleeps.push(ms);
+        },
+        send: async () => {
+          calls += 1;
+          return calls < 3
+            ? { ok: false, status: 500, detail: "http_500" }
+            : { ok: true, status: 200, detail: "http_200" };
+        },
+      },
+    );
+
+    expect(calls).toBe(3);
+    expect(outcome.ok).toBe(true);
+    expect(outcome.attempts).toBe(3);
+    expect(sleeps).toEqual([100, 200]);
+  });
+
+  it("does not retry client errors", async () => {
+    let calls = 0;
+    const outcome = await sendWebhookWithRetry(
+      "https://example.com/hook",
+      {},
+      {
+        sleep: async () => undefined,
+        send: async () => {
+          calls += 1;
+          return { ok: false, status: 404, detail: "http_404" };
+        },
+      },
+    );
+    expect(calls).toBe(1);
+    expect(outcome.attempts).toBe(1);
+    expect(outcome.ok).toBe(false);
+  });
+
+  it("exhausts attempts on persistent network failures", async () => {
+    let calls = 0;
+    const outcome = await sendWebhookWithRetry(
+      "https://example.com/hook",
+      {},
+      {
+        attempts: 2,
+        sleep: async () => undefined,
+        send: async () => {
+          calls += 1;
+          return { ok: false, status: null, detail: "network_TypeError" };
+        },
+      },
+    );
+    expect(calls).toBe(2);
+    expect(outcome.ok).toBe(false);
+    expect(outcome.attempts).toBe(2);
   });
 });
 

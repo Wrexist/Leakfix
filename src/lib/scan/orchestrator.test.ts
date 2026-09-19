@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { disposeDb } from "@/lib/db/client";
 
 import { GOOD_HEADERS, GOOD_PAGE_HTML, LEAKY_PAGE_HTML } from "./__fixtures__/pages";
+import { sendDigestForMonitor } from "./digest";
 import { loadScanHistory } from "./history";
 import { createScan, runScan } from "./orchestrator";
 import {
@@ -225,6 +226,32 @@ describe("scan orchestrator (end to end, local fixture server)", () => {
 
     const updated = await getMonitorById(monitor.id);
     expect(updated?.lastNotifiedAt).not.toBeNull();
+
+    await deleteMonitor(monitor.id);
+  });
+
+  it("sends a digest email for a monitored target", async () => {
+    const url = `${baseUrl}/good`;
+    const monitor = await createMonitor({ normalizedUrl: url, kind: "website", label: "Digest" });
+    await updateMonitor(monitor.id, {
+      notifyEmail: "ops@example.test",
+      digestFrequency: "weekly",
+    });
+
+    const recipients: string[] = [];
+    const current = await getMonitorById(monitor.id);
+    const result = await sendDigestForMonitor(current!, {
+      deliverEmail: async (message) => {
+        recipients.push(message.to);
+        return { ok: true, status: 202, detail: "http_202" };
+      },
+      baseUrl: "https://leakfix.test",
+    });
+
+    expect(result[0]?.status).toBe("sent");
+    expect(recipients).toEqual(["ops@example.test"]);
+    const entries = await getNotificationsForMonitor(monitor.id, 5);
+    expect(entries.some((entry) => entry.channel === "digest" && entry.status === "sent")).toBe(true);
 
     await deleteMonitor(monitor.id);
   });

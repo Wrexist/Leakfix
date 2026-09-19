@@ -59,9 +59,12 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 - **Monitoring**: add any target to `/monitors`, re-scan it on a schedule via the
   authenticated `GET|POST /api/cron/rescan` endpoint, watch the score trend, and
   diff any two scans on `/compare?a=…&b=…`.
-- **Change notifications**: per-monitor webhook (Slack/Discord/generic JSON) and
-  email alerts when the score drops, changes, or after every scan, with a test
-  button and a delivery log. See [docs/monitoring.md](docs/monitoring.md).
+- **Change notifications**: per-monitor webhook (Slack Block Kit / Discord
+  embeds / generic JSON) and email alerts when the score drops, changes, or after
+  every scan, with automatic retry/backoff, a test button, and a delivery log.
+- **Scheduled digests**: daily or weekly email summaries per monitor via
+  `GET|POST /api/cron/digest`, with a manual “Send digest now”. See
+  [docs/monitoring.md](docs/monitoring.md).
 - An **explicit scan state machine** (`queued → fetching → analyzing →
   completed | failed`) persisted in the database and reflected in the UI.
 - **Transparent scoring** (see [docs/architecture.md](docs/architecture.md)).

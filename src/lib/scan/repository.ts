@@ -113,6 +113,8 @@ export interface UpdateMonitorPatch {
   notifyPolicy?: string;
   lastNotifiedAt?: Date | null;
   lastNotifiedScore?: number | null;
+  digestFrequency?: string;
+  lastDigestAt?: Date | null;
 }
 
 export async function createMonitor(input: {
@@ -173,6 +175,7 @@ export async function insertNotification(input: {
   target: string;
   status: string;
   detail?: string | null;
+  attempts?: number;
 }): Promise<NotificationRow> {
   const { db } = await getDb();
   const [row] = await db
@@ -184,6 +187,7 @@ export async function insertNotification(input: {
       target: input.target,
       status: input.status,
       detail: input.detail ?? null,
+      attempts: input.attempts ?? 1,
     })
     .returning();
   return row;

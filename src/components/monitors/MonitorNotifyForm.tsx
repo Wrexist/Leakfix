@@ -3,6 +3,12 @@
 import { useState, type FormEvent } from "react";
 
 import {
+  DIGEST_FREQUENCIES,
+  DIGEST_FREQUENCY_LABEL,
+  isDigestFrequency,
+  type DigestFrequency,
+} from "@/lib/scan/digest-policy";
+import {
   NOTIFY_POLICIES,
   NOTIFY_POLICY_LABEL,
   type NotifyPolicy,
@@ -13,6 +19,7 @@ interface MonitorNotifyFormProps {
   webhookUrl: string | null;
   email: string | null;
   policy: NotifyPolicy;
+  digestFrequency: string;
   emailEnabled: boolean;
 }
 
@@ -21,12 +28,16 @@ export function MonitorNotifyForm({
   webhookUrl,
   email,
   policy,
+  digestFrequency,
   emailEnabled,
 }: MonitorNotifyFormProps) {
   const [webhook, setWebhook] = useState(webhookUrl ?? "");
   const [mail, setMail] = useState(email ?? "");
   const [policyValue, setPolicyValue] = useState<NotifyPolicy>(policy);
-  const [busy, setBusy] = useState<"save" | "test" | null>(null);
+  const [digest, setDigest] = useState<DigestFrequency>(
+    isDigestFrequency(digestFrequency) ? digestFrequency : "off",
+  );
+  const [busy, setBusy] = useState<"save" | "test" | "digest" | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -38,7 +49,12 @@ export function MonitorNotifyForm({
       const response = await fetch(`/api/monitors/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ webhookUrl: webhook, email: mail, notifyPolicy: policyValue }),
+        body: JSON.stringify({
+          webhookUrl: webhook,
+          email: mail,
+          notifyPolicy: policyValue,
+          digestFrequency: digest,
+        }),
       });
       const payload = (await response.json().catch(() => null)) as
         | { error?: { message?: string } }
@@ -48,6 +64,34 @@ export function MonitorNotifyForm({
         return;
       }
       setMessage({ tone: "ok", text: "Notification settings saved." });
+    } catch {
+      setMessage({ tone: "error", text: "We couldn't reach the server. Try again." });
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function sendDigestNow() {
+    if (busy) return;
+    setBusy("digest");
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/monitors/${id}/digest`, { method: "POST" });
+      const payload = (await response.json().catch(() => null)) as
+        | { error?: { message?: string }; deliveries?: { channel: string; status: string; detail: string }[] }
+        | null;
+      if (!response.ok) {
+        setMessage({ tone: "error", text: payload?.error?.message ?? "Could not send a digest." });
+        return;
+      }
+      const deliveries = payload?.deliveries ?? [];
+      setMessage({
+        tone: "ok",
+        text:
+          deliveries.length > 0
+            ? deliveries.map((d) => `${d.channel}: ${d.status} (${d.detail})`).join(" · ")
+            : "Nothing to summarise yet.",
+      });
     } catch {
       setMessage({ tone: "error", text: "We couldn't reach the server. Try again." });
     } finally {
@@ -88,6 +132,7 @@ export function MonitorNotifyForm({
       <label className="block text-sm">
         <span className="font-medium text-ink">Webhook URL</span>
         <input
+          id={`notify-webhook-${id}`}
           type="url"
           inputMode="url"
           value={webhook}
@@ -103,6 +148,7 @@ export function MonitorNotifyForm({
       <label className="block text-sm">
         <span className="font-medium text-ink">Email</span>
         <input
+          id={`notify-email-${id}`}
           type="email"
           value={mail}
           onChange={(event) => setMail(event.target.value)}
@@ -120,6 +166,7 @@ export function MonitorNotifyForm({
       <label className="block text-sm">
         <span className="font-medium text-ink">Notify me</span>
         <select
+          id={`notify-policy-${id}`}
           value={policyValue}
           onChange={(event) => setPolicyValue(event.target.value as NotifyPolicy)}
           className="mt-1 h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink outline-none focus-visible:border-brand"
@@ -130,6 +177,25 @@ export function MonitorNotifyForm({
             </option>
           ))}
         </select>
+      </label>
+
+      <label className="block text-sm">
+        <span className="font-medium text-ink">Email digest</span>
+        <select
+          id={`notify-digest-${id}`}
+          value={digest}
+          onChange={(event) => setDigest(event.target.value as DigestFrequency)}
+          className="mt-1 h-10 w-full rounded-lg border border-line bg-white px-3 text-sm text-ink outline-none focus-visible:border-brand"
+        >
+          {DIGEST_FREQUENCIES.map((option) => (
+            <option key={option} value={option}>
+              {DIGEST_FREQUENCY_LABEL[option]}
+            </option>
+          ))}
+        </select>
+        <span className="mt-1 block text-xs text-ink-faint">
+          Summarises scans since the last digest. Sent by the daily/weekly cron.
+        </span>
       </label>
 
       <div className="flex items-end gap-2">
@@ -147,6 +213,14 @@ export function MonitorNotifyForm({
           className="inline-flex h-10 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60"
         >
           {busy === "test" ? "Sending…" : "Send test"}
+        </button>
+        <button
+          type="button"
+          onClick={sendDigestNow}
+          disabled={busy !== null}
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {busy === "digest" ? "Sending…" : "Send digest now"}
         </button>
       </div>
 

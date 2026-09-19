@@ -55,3 +55,56 @@ export async function sendWebhook(
     return { ok: false, status: null, detail: `network_${name}` };
   }
 }
+
+export interface RetryOutcome extends DeliveryOutcome {
+  attempts: number;
+}
+
+export interface WebhookRetryOptions {
+  allowPrivate?: boolean;
+  timeoutMs?: number;
+  attempts?: number;
+  baseDelayMs?: number;
+  /** Injectable for tests; defaults to a real timer. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Injectable for tests; defaults to the real sender. */
+  send?: typeof sendWebhook;
+}
+
+/** Retry transient failures (network errors, 429, and 5xx) — not 4xx client errors. */
+export function isRetryable(outcome: DeliveryOutcome): boolean {
+  if (outcome.detail.startsWith("network_")) return true;
+  if (outcome.status === 429) return true;
+  if (outcome.status != null && outcome.status >= 500) return true;
+  return false;
+}
+
+/**
+ * Sends a webhook with exponential backoff. Retries only transient failures so
+ * a misconfigured URL is not hammered.
+ */
+export async function sendWebhookWithRetry(
+  url: string,
+  payload: unknown,
+  options: WebhookRetryOptions = {},
+): Promise<RetryOutcome> {
+  const attemptsAllowed = Math.max(1, options.attempts ?? 3);
+  const baseDelayMs = options.baseDelayMs ?? 400;
+  const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const send = options.send ?? sendWebhook;
+
+  let outcome: DeliveryOutcome = { ok: false, status: null, detail: "not_attempted" };
+
+  for (let attempt = 1; attempt <= attemptsAllowed; attempt += 1) {
+    outcome = await send(url, payload, {
+      allowPrivate: options.allowPrivate,
+      timeoutMs: options.timeoutMs,
+    });
+    if (outcome.ok || !isRetryable(outcome) || attempt === attemptsAllowed) {
+      return { ...outcome, attempts: attempt };
+    }
+    await sleep(baseDelayMs * 2 ** (attempt - 1));
+  }
+
+  return { ...outcome, attempts: attemptsAllowed };
+}

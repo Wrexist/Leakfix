@@ -82,6 +82,27 @@ Configure them per monitor under **Notifications** on `/monitors`, and use
 **Send test** to verify each channel. Every attempt is recorded in the
 `notifications` table and shown as recent activity under the monitor.
 
+### Retries
+
+Webhook deliveries retry automatically with exponential backoff (3 attempts by
+default, 400 ms → 800 ms → 1.6 s) for transient failures only — network errors,
+`429`, and `5xx`. Client errors (`4xx`) are not retried, so a misconfigured URL
+is not hammered. The number of attempts is shown in the delivery detail and
+stored on the notification row.
+
+### Provider-native formatting
+
+The payload adapts to the destination host:
+
+- `hooks.slack.com` → adds a Block Kit `blocks` array (header, score fields,
+  issue list, and buttons linking to the report and comparison).
+- `discord.com` / `discordapp.com` → adds an `embeds` array with a colour-coded
+  summary.
+- Anything else → a generic JSON payload (`text`, `content`, and structured
+  fields).
+
+Slack and Discord also receive `text` so any client renders something readable.
+
 ### Why this is safe
 
 Webhook URLs are attacker-controllable, so they go through the same network
@@ -110,6 +131,27 @@ is sent to a fixed provider endpoint, so it is not SSRF-reachable.
 Notifications are sent from the scan pipeline for every completed scan of a
 monitored target, so manual scans and scheduled scans both notify. Delivery
 failures are logged and never break the scan.
+
+## Scheduled digests
+
+Each monitor has an **email digest** frequency: `off` (default), `daily`, or
+`weekly`. A digest summarises every scan since the last digest: the score at the
+start and end of the period, the delta, how many scans ran, and the new and fixed
+issues, with links to the report and the comparison.
+
+- Configure it on `/monitors` under **Notifications → Email digest**.
+- Send one immediately with **Send digest now**.
+- Send all due digests on a schedule:
+
+```
+GET|POST /api/cron/digest
+Authorization: Bearer <CRON_SECRET>
+```
+
+Run it once a day (or hourly — a monitor is only sent when its window has
+elapsed). It returns `{ checked, sent, skipped, results }`. Digests require
+`EMAIL_API_KEY` / `EMAIL_FROM`; without them the run is a no-op. As with
+notifications, a send failure is recorded and never throws.
 
 ## Design notes and limitations
 

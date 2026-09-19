@@ -54,6 +54,8 @@ CREATE TABLE IF NOT EXISTS monitors (
   notify_policy text NOT NULL DEFAULT 'drop',
   last_notified_at timestamptz,
   last_notified_score integer,
+  digest_frequency text NOT NULL DEFAULT 'off',
+  last_digest_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
@@ -68,6 +70,7 @@ CREATE TABLE IF NOT EXISTS notifications (
   target text NOT NULL,
   status text NOT NULL,
   detail text,
+  attempts integer NOT NULL DEFAULT 1,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
@@ -84,4 +87,7 @@ ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_email text;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS notify_policy text NOT NULL DEFAULT 'drop';
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_notified_at timestamptz;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_notified_score integer;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS digest_frequency text NOT NULL DEFAULT 'off';
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_digest_at timestamptz;
+ALTER TABLE notifications ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 1;
 `;

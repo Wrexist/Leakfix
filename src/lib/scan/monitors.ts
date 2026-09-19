@@ -1,5 +1,6 @@
 import type { MonitorRow } from "@/lib/db/schema";
 
+import { isDigestFrequency } from "./digest-policy";
 import { isNotifyPolicy } from "./notify-policy";
 import { isScanKind, type ScanKind } from "./types";
 
@@ -18,6 +19,8 @@ export interface MonitorDto {
   notifyPolicy: string;
   lastNotifiedAt: string | null;
   lastNotifiedScore: number | null;
+  digestFrequency: string;
+  lastDigestAt: string | null;
   createdAt: string;
 }
 
@@ -37,6 +40,8 @@ export function toMonitorDto(row: MonitorRow): MonitorDto {
     notifyPolicy: isNotifyPolicy(row.notifyPolicy) ? row.notifyPolicy : "drop",
     lastNotifiedAt: row.lastNotifiedAt ? row.lastNotifiedAt.toISOString() : null,
     lastNotifiedScore: row.lastNotifiedScore,
+    digestFrequency: isDigestFrequency(row.digestFrequency) ? row.digestFrequency : "off",
+    lastDigestAt: row.lastDigestAt ? row.lastDigestAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
   };
 }
