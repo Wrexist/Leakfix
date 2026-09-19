@@ -44,6 +44,11 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 - **App Store listing checks** (iPhone + Android): name, icon, description
   length, screenshot count, star rating and rating volume, update freshness,
   localization, privacy policy link, and developer link.
+- **Freemium + paywall**: a free preview (score, every finding title, evidence, and
+  the top finding's full fix) with the remaining fixes, suggestions, exports,
+  monitoring, and alerts behind a one-time **3D paywall**. Entitlements are
+  enforced server-side; Stripe Checkout and webhooks are wired (env-gated). See
+  [docs/freemium.md](docs/freemium.md).
 - **Exports**: download the report as **CSV** (findings + suggestions, with fixes)
   or **Markdown**, or **Print / Save as PDF** from the browser. Endpoint:
   `GET /api/scans/[id]/export?format=csv|md`.

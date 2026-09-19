@@ -2,9 +2,16 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { ScanView } from "@/components/ScanView";
+import { devUnlockEnabled, formatPrice, paymentsConfigured } from "@/lib/billing/pricing";
 import { toScanDto } from "@/lib/scan/dto";
 import { loadScanHistory } from "@/lib/scan/history";
-import { getFindingsForScan, getMonitorByUrl, getScanById } from "@/lib/scan/repository";
+import {
+  getFindingsForScan,
+  getMonitorByUrl,
+  getScanById,
+  hasEntitlement,
+  hasEntitlementForUrl,
+} from "@/lib/scan/repository";
 
 export const dynamic = "force-dynamic";
 
@@ -28,14 +35,25 @@ export default async function ScanPage({ params }: { params: Promise<{ id: strin
   }
 
   const findings = await getFindingsForScan(id);
-  const history = await loadScanHistory(scan);
-  const monitor = await getMonitorByUrl(scan.normalizedUrl);
+  const [history, monitor, unlockedForScan, unlockedForUrl] = await Promise.all([
+    loadScanHistory(scan),
+    getMonitorByUrl(scan.normalizedUrl),
+    hasEntitlement(id),
+    hasEntitlementForUrl(scan.normalizedUrl),
+  ]);
+  const unlocked = unlockedForScan || unlockedForUrl;
 
   return (
     <ScanView
-      initialScan={toScanDto(scan, findings)}
+      key={unlocked ? "unlocked" : "locked"}
+      initialScan={toScanDto(scan, findings, { unlocked })}
       history={history}
       monitored={monitor !== null}
+      billing={{
+        price: formatPrice(),
+        paymentsReady: paymentsConfigured(),
+        devUnlock: devUnlockEnabled(),
+      }}
     />
   );
 }

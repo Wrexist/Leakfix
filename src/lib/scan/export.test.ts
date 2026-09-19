@@ -46,6 +46,8 @@ function makeScan(overrides: Partial<ScanDto> = {}): ScanDto {
       passed: 0,
       total: 1,
     },
+    unlocked: true,
+    lockedSuggestionCount: 0,
     insights: {
       suggestions: [
         {

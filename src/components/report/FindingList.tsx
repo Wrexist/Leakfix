@@ -1,7 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "motion/react";
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+
+import { Paywall3D } from "./Paywall3D";
 
 import {
   groupByPriority,
@@ -31,8 +33,23 @@ interface FilterOption {
   count: number;
 }
 
-export function FindingList({ findings }: { findings: Finding[] }) {
+export function FindingList({
+  findings,
+  locked = false,
+  scanId,
+  price,
+  paymentsReady,
+  devUnlock,
+}: {
+  findings: Finding[];
+  locked?: boolean;
+  scanId: string;
+  price: string;
+  paymentsReady: boolean;
+  devUnlock: boolean;
+}) {
   const [filter, setFilter] = useState<Filter>("all");
+  const lockedCount = findings.filter((finding) => finding.locked).length;
 
   const priorityGroups = useMemo(() => groupByPriority(findings), [findings]);
 
@@ -140,7 +157,7 @@ export function FindingList({ findings }: { findings: Finding[] }) {
           transition={{ duration: 0.25, ease: EASE }}
           className="mt-6 space-y-10"
         >
-          {groups.map((group) => (
+          {groups.map((group, groupIndex) => (
             <div key={group.key}>
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-faint">
@@ -152,11 +169,23 @@ export function FindingList({ findings }: { findings: Finding[] }) {
               </div>
               <ul className="mt-4 space-y-4">
                 {group.findings.map((finding, index) => (
-                  <FindingCard
-                    key={finding.ruleId}
-                    finding={finding}
-                    defaultOpen={group.key === "fix-first" && index === 0}
-                  />
+                  <Fragment key={finding.ruleId}>
+                    <FindingCard
+                      finding={finding}
+                      defaultOpen={group.key === "fix-first" && index === 0}
+                    />
+                    {locked && groupIndex === 0 && index === 0 ? (
+                      <li className="list-none">
+                        <Paywall3D
+                          scanId={scanId}
+                          price={price}
+                          lockedCount={lockedCount}
+                          paymentsReady={paymentsReady}
+                          devUnlock={devUnlock}
+                        />
+                      </li>
+                    ) : null}
+                  </Fragment>
                 ))}
               </ul>
             </div>

@@ -15,6 +15,9 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${APP_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Exercise the reduced-motion path as well, and keep motion from making
+    // elements unstable for interaction.
+    reducedMotion: "reduce",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
   webServer: [
@@ -33,6 +36,7 @@ export default defineConfig({
         DATABASE_DIR: "memory",
         LEAKFIX_ALLOW_PRIVATE_TARGETS: "true",
         CRON_SECRET: "e2e-secret",
+        LEAKFIX_DEV_UNLOCK: "true",
         EMAIL_API_KEY: "e2e-key",
         EMAIL_FROM: "LeakFix <alerts@leakfix.test>",
         EMAIL_API_URL: `http://127.0.0.1:${FIXTURE_PORT}/email`,

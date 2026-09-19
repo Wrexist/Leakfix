@@ -35,6 +35,10 @@ export interface ScanDto {
   totalFindings: number;
   auditSummary: AuditSummary | null;
   insights: ScanInsights | null;
+  /** False when the full report is behind the paywall. */
+  unlocked: boolean;
+  /** Number of suggestions withheld when locked. */
+  lockedSuggestionCount: number;
 }
 
 function toFinding(row: FindingRow): Finding {
@@ -51,10 +55,27 @@ function toFinding(row: FindingRow): Finding {
   };
 }
 
-export function toScanDto(scan: ScanRow, findingRows: FindingRow[]): ScanDto {
-  const findings = findingRows.map(toFinding);
+export function toScanDto(
+  scan: ScanRow,
+  findingRows: FindingRow[],
+  options: { unlocked?: boolean } = {},
+): ScanDto {
+  const unlocked = options.unlocked ?? false;
+  const findings = findingRows.map((row, index) => {
+    const item = toFinding(row);
+    // Free tier: the top finding is shown in full; the rest keep the evidence
+    // and a one-line recommendation, with the step-by-step fix withheld.
+    if (!unlocked && index > 0) {
+      return { ...item, details: undefined, locked: true };
+    }
+    return item;
+  });
   const severityCounts = emptySeverityCounts();
   for (const item of findings) severityCounts[item.severity] += 1;
+  const rawSuggestions = scan.insights?.suggestions ?? [];
+  const lockedSuggestionCount = unlocked ? 0 : rawSuggestions.length;
+  const insights =
+    scan.insights && !unlocked ? { ...scan.insights, suggestions: [] } : (scan.insights ?? null);
 
   const errorCode = isScanErrorCode(scan.errorCode) ? scan.errorCode : null;
   const errorCopy = errorCode ? userFacingScanError(errorCode) : null;
@@ -78,6 +99,8 @@ export function toScanDto(scan: ScanRow, findingRows: FindingRow[]): ScanDto {
     severityCounts,
     totalFindings: findings.length,
     auditSummary: scan.auditSummary ?? null,
-    insights: scan.insights ?? null,
+    insights,
+    unlocked,
+    lockedSuggestionCount,
   };
 }

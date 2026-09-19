@@ -141,6 +141,28 @@ export function FindingCard({
               ) : null}
             </AnimatePresence>
           </>
+        ) : finding.locked ? (
+          <div className="mt-4 flex items-start gap-3 rounded-xl border border-dashed border-line-strong bg-canvas px-4 py-3">
+            <span
+              aria-hidden="true"
+              className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-ink text-white"
+            >
+              <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="5" y="11" width="14" height="9" rx="2" />
+                <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+              </svg>
+            </span>
+            <div>
+              <p className="text-sm font-semibold text-ink">Fix details locked</p>
+              <p className="mt-0.5 text-sm text-ink-soft">
+                Unlock the full report to see the step-by-step fix, the code snippet, and how to
+                verify it.
+              </p>
+              <a href="#unlock" className="mt-2 inline-flex text-sm font-semibold text-brand">
+                Unlock full report
+              </a>
+            </div>
+          </div>
         ) : null}
       </div>
     </li>

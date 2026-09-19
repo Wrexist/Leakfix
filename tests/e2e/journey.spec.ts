@@ -44,6 +44,22 @@ test("scans a page, shows real progress, and renders a prioritized report", asyn
   await expect(page.getByText("How to fix it").first()).toBeVisible();
 });
 
+test("shows the paywall and unlocks the full report", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/good`);
+  await page.getByRole("button", { name: /find my leaks/i }).first().click();
+  await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+
+  // Free preview: the top finding is open, the rest have locked fix details.
+  await expect(page.getByText("Fix details locked").first()).toBeVisible();
+
+  const unlock = page.getByRole("button", { name: /unlock full report \(dev\)/i });
+  await unlock.scrollIntoViewIfNeeded();
+  await unlock.click();
+
+  await expect(page.getByText("Fix details locked")).toHaveCount(0, { timeout: 15_000 });
+});
+
 test("persists the report across a reload (server-rendered result)", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/leaky`);
@@ -89,7 +105,7 @@ test("shows a not-found page for an unknown scan", async ({ page }) => {
 
 test("monitors a target", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/leaky`);
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/good`);
   await page.getByRole("button", { name: /find my leaks/i }).first().click();
   await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
 
@@ -129,7 +145,7 @@ test("monitors a target", async ({ page }) => {
 
 test("exports a report as CSV and Markdown", async ({ page, request }) => {
   await page.goto("/");
-  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/leaky`);
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/good`);
   await page.getByRole("button", { name: /find my leaks/i }).first().click();
   await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
 

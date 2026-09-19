@@ -103,6 +103,27 @@ export const notifications = pgTable(
   (table) => [index("notifications_monitor_id_idx").on(table.monitorId)],
 );
 
+export const entitlements = pgTable(
+  "entitlements",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    scanId: text("scan_id")
+      .notNull()
+      .references(() => scans.id, { onDelete: "cascade" }),
+    normalizedUrl: text("normalized_url").notNull(),
+    kind: text("kind").notNull().default("report_unlock"),
+    provider: text("provider").notNull().default("dev"),
+    reference: text("reference"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("entitlements_scan_id_idx").on(table.scanId),
+    index("entitlements_normalized_url_idx").on(table.normalizedUrl),
+  ],
+);
+
 export type ScanRow = typeof scans.$inferSelect;
 export type NewScanRow = typeof scans.$inferInsert;
 export type FindingRow = typeof findings.$inferSelect;
@@ -111,3 +132,5 @@ export type MonitorRow = typeof monitors.$inferSelect;
 export type NewMonitorRow = typeof monitors.$inferInsert;
 export type NotificationRow = typeof notifications.$inferSelect;
 export type NewNotificationRow = typeof notifications.$inferInsert;
+export type EntitlementRow = typeof entitlements.$inferSelect;
+export type NewEntitlementRow = typeof entitlements.$inferInsert;

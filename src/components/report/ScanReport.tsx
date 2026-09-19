@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import type { BillingInfo } from "@/lib/billing/pricing";
 import { hostnameOf } from "@/lib/format";
 import type { ScanDto } from "@/lib/scan/dto";
 import type { ScanHistoryData } from "@/lib/scan/history";
@@ -21,13 +22,15 @@ export function ScanReport({
   scan,
   history,
   monitored,
+  billing,
 }: {
   scan: ScanDto;
   history: ScanHistoryData;
   monitored: boolean;
+  billing: BillingInfo;
 }) {
   if (scan.kind !== "website") {
-    return <AppReport scan={scan} history={history} monitored={monitored} />;
+    return <AppReport scan={scan} history={history} monitored={monitored} billing={billing} />;
   }
 
   const analyzedUrl = scan.finalUrl ?? scan.normalizedUrl;
@@ -41,9 +44,20 @@ export function ScanReport({
       <ScanHistory history={history} currentId={scan.id} />
       <MonitorPanel url={scan.normalizedUrl} initiallyMonitored={monitored} />
       <ActionPlan findings={scan.findings} />
-      <FindingList findings={scan.findings} />
+      <FindingList
+        findings={scan.findings}
+        locked={!scan.unlocked}
+        scanId={scan.id}
+        price={billing.price}
+        paymentsReady={billing.paymentsReady}
+        devUnlock={billing.devUnlock}
+      />
       <SeoSnapshot seo={scan.insights?.seo ?? null} />
-      <Suggestions suggestions={scan.insights?.suggestions ?? []} />
+      <Suggestions
+        suggestions={scan.insights?.suggestions ?? []}
+        locked={!scan.unlocked}
+        lockedCount={scan.lockedSuggestionCount}
+      />
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

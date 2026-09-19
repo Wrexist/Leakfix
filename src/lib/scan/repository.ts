@@ -2,10 +2,12 @@ import { and, asc, desc, eq, ne } from "drizzle-orm";
 
 import { getDb } from "@/lib/db/client";
 import {
+  entitlements,
   findings,
   monitors,
   notifications,
   scans,
+  type EntitlementRow,
   type FindingRow,
   type MonitorRow,
   type NotificationRow,
@@ -89,6 +91,53 @@ export async function getFindingsForScan(scanId: string): Promise<FindingRow[]> 
     .from(findings)
     .where(eq(findings.scanId, scanId))
     .orderBy(asc(findings.sortIndex));
+}
+
+export async function getEntitlement(scanId: string): Promise<EntitlementRow | null> {
+  const { db } = await getDb();
+  const rows = await db
+    .select()
+    .from(entitlements)
+    .where(eq(entitlements.scanId, scanId))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+export async function hasEntitlement(scanId: string): Promise<boolean> {
+  return (await getEntitlement(scanId)) !== null;
+}
+
+export async function hasEntitlementForUrl(normalizedUrl: string): Promise<boolean> {
+  const { db } = await getDb();
+  const rows = await db
+    .select({ id: entitlements.id })
+    .from(entitlements)
+    .where(eq(entitlements.normalizedUrl, normalizedUrl))
+    .limit(1);
+  return rows.length > 0;
+}
+
+/** Grants an unlock for a scan. Idempotent: one entitlement per scan. */
+export async function grantEntitlement(input: {
+  scanId: string;
+  normalizedUrl: string;
+  provider: string;
+  reference?: string | null;
+}): Promise<EntitlementRow> {
+  const { db } = await getDb();
+  await db
+    .insert(entitlements)
+    .values({
+      scanId: input.scanId,
+      normalizedUrl: input.normalizedUrl,
+      provider: input.provider,
+      reference: input.reference ?? null,
+    })
+    .onConflictDoNothing({ target: entitlements.scanId });
+
+  const row = await getEntitlement(input.scanId);
+  if (!row) throw new Error("Failed to grant entitlement");
+  return row;
 }
 
 /** Completed scans of a target, newest first. Used for trends and comparisons. */

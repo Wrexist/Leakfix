@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import type { BillingInfo } from "@/lib/billing/pricing";
 import type { ScanDto } from "@/lib/scan/dto";
 import type { ScanHistoryData } from "@/lib/scan/history";
 
@@ -18,10 +19,12 @@ export function AppReport({
   scan,
   history,
   monitored,
+  billing,
 }: {
   scan: ScanDto;
   history: ScanHistoryData;
   monitored: boolean;
+  billing: BillingInfo;
 }) {
   const score = scan.score ?? 0;
 
@@ -32,8 +35,19 @@ export function AppReport({
       <ScanHistory history={history} currentId={scan.id} />
       <MonitorPanel url={scan.normalizedUrl} initiallyMonitored={monitored} />
       <ActionPlan findings={scan.findings} />
-      <FindingList findings={scan.findings} />
-      <Suggestions suggestions={scan.insights?.suggestions ?? []} />
+      <FindingList
+        findings={scan.findings}
+        locked={!scan.unlocked}
+        scanId={scan.id}
+        price={billing.price}
+        paymentsReady={billing.paymentsReady}
+        devUnlock={billing.devUnlock}
+      />
+      <Suggestions
+        suggestions={scan.insights?.suggestions ?? []}
+        locked={!scan.unlocked}
+        lockedCount={scan.lockedSuggestionCount}
+      />
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

@@ -3,7 +3,12 @@ import { NextResponse } from "next/server";
 import { hostnameOf } from "@/lib/format";
 import { toScanDto, type ScanDto } from "@/lib/scan/dto";
 import { buildCsv, buildMarkdown } from "@/lib/scan/export";
-import { getFindingsForScan, getScanById } from "@/lib/scan/repository";
+import {
+  getFindingsForScan,
+  getScanById,
+  hasEntitlement,
+  hasEntitlementForUrl,
+} from "@/lib/scan/repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +31,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "Scan not found." } }, { status: 404 });
   }
 
+  const unlocked =
+    (await hasEntitlement(id)) || (await hasEntitlementForUrl(scan.normalizedUrl));
+  if (!unlocked) {
+    return NextResponse.json(
+      { error: { code: "PAYWALL", message: "Unlock the full report to export it." } },
+      { status: 402 },
+    );
+  }
+
   const findings = await getFindingsForScan(id);
-  const dto = toScanDto(scan, findings);
+  const dto = toScanDto(scan, findings, { unlocked: true });
   const format = new URL(request.url).searchParams.get("format") ?? "csv";
 
   if (format === "md" || format === "markdown") {

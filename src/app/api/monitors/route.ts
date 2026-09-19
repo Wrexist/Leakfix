@@ -8,6 +8,7 @@ import {
   getMonitorById,
   getMonitorByUrl,
   getScansForUrl,
+  hasEntitlementForUrl,
   listMonitors,
   updateMonitor,
 } from "@/lib/scan/repository";
@@ -67,6 +68,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: { code: "INVALID_URL", message: validation.message } },
       { status: 400 },
+    );
+  }
+
+  if (!(await hasEntitlementForUrl(validation.target.href))) {
+    return NextResponse.json(
+      { error: { code: "PAYWALL", message: "Unlock a report for this target before monitoring it." } },
+      { status: 402 },
     );
   }
 

@@ -69,10 +69,25 @@ export function ReportHero({
           <SeveritySummary counts={scan.severityCounts} />
 
           <div className="mt-6 flex flex-wrap gap-3">
+            {scan.totalFindings > 0 && !scan.unlocked ? (
+              <a
+                href="#unlock"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-white transition-colors hover:bg-black"
+              >
+                Unlock full report
+                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M5 10h10M11 6l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </a>
+            ) : null}
             {scan.totalFindings > 0 ? (
               <a
                 href="#action-plan"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-white transition-colors hover:bg-black"
+                className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors ${
+                  scan.unlocked
+                    ? "bg-ink text-white hover:bg-black"
+                    : "border border-line bg-white text-ink hover:bg-canvas"
+                }`}
               >
                 See the fixes
                 <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">

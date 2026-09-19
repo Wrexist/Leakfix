@@ -80,6 +80,19 @@ CREATE TABLE IF NOT EXISTS notifications (
 
 CREATE INDEX IF NOT EXISTS notifications_monitor_id_idx ON notifications (monitor_id);
 
+CREATE TABLE IF NOT EXISTS entitlements (
+  id text PRIMARY KEY,
+  scan_id text NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+  normalized_url text NOT NULL,
+  kind text NOT NULL DEFAULT 'report_unlock',
+  provider text NOT NULL DEFAULT 'dev',
+  reference text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS entitlements_scan_id_idx ON entitlements (scan_id);
+CREATE INDEX IF NOT EXISTS entitlements_normalized_url_idx ON entitlements (normalized_url);
+
 -- Idempotent upgrades for databases created before these columns existed.
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS audit_summary jsonb;
 ALTER TABLE scans ADD COLUMN IF NOT EXISTS insights jsonb;

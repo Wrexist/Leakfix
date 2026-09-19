@@ -3,6 +3,7 @@
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useState } from "react";
 
+import type { BillingInfo } from "@/lib/billing/pricing";
 import { recordRecentScan } from "@/lib/recent-scans";
 import type { ScanDto } from "@/lib/scan/dto";
 import type { ScanHistoryData } from "@/lib/scan/history";
@@ -19,10 +20,12 @@ export function ScanView({
   initialScan,
   history,
   monitored,
+  billing,
 }: {
   initialScan: ScanDto;
   history: ScanHistoryData;
   monitored: boolean;
+  billing: BillingInfo;
 }) {
   const [scan, setScan] = useState<ScanDto>(initialScan);
   const reduce = useReducedMotion();
@@ -79,7 +82,7 @@ export function ScanView({
       >
         {view === "failed" ? <ScanErrorState scan={scan} /> : null}
         {view === "report" ? (
-          <ScanReport scan={scan} history={history} monitored={monitored} />
+          <ScanReport scan={scan} history={history} monitored={monitored} billing={billing} />
         ) : null}
         {view === "scanning" ? <ScanningPanel scan={scan} /> : null}
       </motion.div>

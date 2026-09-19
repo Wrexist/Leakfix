@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 
 import { toScanDto } from "@/lib/scan/dto";
-import { getFindingsForScan, getScanById } from "@/lib/scan/repository";
+import {
+  getFindingsForScan,
+  getScanById,
+  hasEntitlement,
+  hasEntitlementForUrl,
+} from "@/lib/scan/repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,6 +25,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "Scan not found." } }, { status: 404 });
   }
 
-  const findingRows = await getFindingsForScan(id);
-  return NextResponse.json(toScanDto(scan, findingRows));
+  const [findingRows, unlockedForScan, unlockedForUrl] = await Promise.all([
+    getFindingsForScan(id),
+    hasEntitlement(id),
+    hasEntitlementForUrl(scan.normalizedUrl),
+  ]);
+
+  return NextResponse.json(
+    toScanDto(scan, findingRows, { unlocked: unlockedForScan || unlockedForUrl }),
+  );
 }

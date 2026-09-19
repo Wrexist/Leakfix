@@ -124,6 +124,8 @@ export interface Finding {
   recommendation: string;
   confidence: Confidence;
   details?: FindingDetails;
+  /** True when fix details are withheld behind the paywall. */
+  locked?: boolean;
 }
 
 export interface SeverityCounts {
