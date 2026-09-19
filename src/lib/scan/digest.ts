@@ -10,12 +10,14 @@ import {
 import { emailConfigured, sendEmail, type EmailOutcome } from "./email";
 import { monitorLabel } from "./monitors";
 import {
+  ensureWebhookSecret,
   getFindingsForScan,
   getScansForUrl,
   insertNotification,
   listMonitors,
   updateMonitor,
 } from "./repository";
+import { sendWebhookWithRetry } from "./webhook";
 
 export interface DigestScan {
   id: string;
@@ -27,6 +29,8 @@ export interface DigestPlan {
   subject: string;
   text: string;
   html: string;
+  chartHtml: string;
+  sparkline: string;
   scansCount: number;
   firstScore: number | null;
   lastScore: number | null;
@@ -35,6 +39,43 @@ export interface DigestPlan {
   fixed: ComparedFinding[];
   reportUrl: string;
   compareUrl: string | null;
+}
+
+const SPARK_CHARS = ["▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"];
+
+/** Plain-text sparkline of the scores (for text-only email clients). */
+export function sparkline(scores: (number | null)[]): string {
+  const values = scores.filter((score): score is number => score != null);
+  if (values.length < 2) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = Math.max(1, max - min);
+  return scores
+    .map((score) =>
+      score == null ? " " : SPARK_CHARS[Math.min(7, Math.round(((score - min) / span) * 7))],
+    )
+    .join("");
+}
+
+function scoreColor(score: number): string {
+  if (score >= 80) return "#0f7a56";
+  if (score >= 60) return "#b45309";
+  return "#c0272d";
+}
+
+/** Email-safe bar chart (table + inline styles) of the recent scores. */
+export function scoreBarsHtml(scores: (number | null)[], maxPoints = 14): string {
+  const points = scores.filter((score): score is number => score != null).slice(-maxPoints);
+  if (points.length < 2) return "";
+  const bars = points
+    .map((score) => {
+      const height = Math.max(6, Math.round((Math.max(0, Math.min(100, score)) / 100) * 48));
+      return `<td valign="bottom" style="padding:0 3px;"><div style="width:14px;height:${height}px;background:${scoreColor(
+        score,
+      )};border-radius:3px 3px 0 0;"></div></td>`;
+    })
+    .join("");
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="height:52px;margin:8px 0"><tr>${bars}</tr></table>`;
 }
 
 function siteBaseUrl(override?: string): string {
@@ -105,6 +146,13 @@ export function planDigest(input: {
   lines.push("", `Report: ${reportUrl}`);
   if (compareUrl) lines.push(`Compare: ${compareUrl}`);
 
+  const scores = input.scans.map((scan) => scan.score);
+  const chartHtml = scoreBarsHtml(scores);
+  const spark = sparkline(scores);
+  if (spark) {
+    lines.push("", `Score trend: ${spark}`);
+  }
+
   const text = lines.join("\n");
   const html = [
     `<p><strong>LeakFix ${period.toLowerCase()} digest — ${input.label}</strong></p>`,
@@ -112,6 +160,7 @@ export function planDigest(input: {
     delta == null
       ? `<p>Score: <strong>${last.score ?? "—"}/100</strong></p>`
       : `<p>Score: <strong>${first.score} → ${last.score}</strong> (${formatDelta(delta)})</p>`,
+    chartHtml ? `<p style="margin:0;color:#4b5468">Score trend</p>${chartHtml}` : "",
     `<p>Scans in period: ${input.scans.length} · New issues: ${input.added.length} · Fixed: ${input.fixed.length}</p>`,
     input.added.length > 0 ? `<h4>New issues</h4><ul>${input.added
       .slice(0, 5)
@@ -132,6 +181,8 @@ export function planDigest(input: {
     subject,
     text,
     html,
+    chartHtml,
+    sparkline: spark,
     scansCount: input.scans.length,
     firstScore: first.score,
     lastScore: last.score,
@@ -161,28 +212,26 @@ function windowStart(monitor: MonitorRow, now: Date): Date {
 
 export interface DigestDeps {
   deliverEmail?: typeof sendEmail;
+  deliverWebhook?: typeof sendWebhookWithRetry;
+  allowPrivate?: boolean;
+  signPayload?: boolean;
   baseUrl?: string;
   now?: Date;
 }
 
-export interface DigestDelivery {
-  channel: "digest";
-  target: string;
-  status: "sent" | "failed" | "skipped";
-  detail: string;
+export interface PreparedDigest {
+  plan: DigestPlan;
+  lastScanId: string;
 }
 
 /**
- * Builds and sends the digest email for one monitor. Used by both the scheduled
- * endpoint and the manual "Send digest" action.
+ * Gathers the window of scans and builds the digest plan without sending it.
+ * Shared by the sender, the scheduler, and the preview endpoint.
  */
-export async function sendDigestForMonitor(
+export async function prepareDigest(
   monitor: MonitorRow,
   deps: DigestDeps = {},
-): Promise<DigestDelivery[]> {
-  const recipients = digestRecipients(monitor);
-  if (recipients.length === 0) return [];
-
+): Promise<PreparedDigest | null> {
   const now = deps.now ?? new Date();
   const start = windowStart(monitor, now);
   const history = (await getScansForUrl(monitor.normalizedUrl, 30))
@@ -190,7 +239,7 @@ export async function sendDigestForMonitor(
     .reverse()
     .filter((scan) => scan.createdAt.getTime() >= start.getTime());
 
-  if (history.length === 0) return [];
+  if (history.length === 0) return null;
 
   const first = history[0];
   const last = history[history.length - 1];
@@ -214,39 +263,122 @@ export async function sendDigestForMonitor(
     fixed: diff.fixed,
     baseUrl: deps.baseUrl,
   });
-  if (!plan) return [];
 
-  const message = {
-    to: recipients,
-    subject: plan.subject,
+  if (!plan) return null;
+  return { plan, lastScanId: last.id };
+}
+
+export function digestWebhookPayload(plan: DigestPlan, monitor: MonitorRow): Record<string, unknown> {
+  return {
     text: plan.text,
-    html: plan.html,
+    content: plan.text,
+    subject: plan.subject,
+    digest: true,
+    monitor: { id: monitor.id, label: monitorLabel(monitor), url: monitor.normalizedUrl },
+    score: plan.lastScore,
+    previousScore: plan.firstScore,
+    delta: plan.delta,
+    newIssues: plan.added.map((finding) => ({
+      ruleId: finding.ruleId,
+      title: finding.title,
+      severity: finding.severity,
+    })),
+    fixedIssues: plan.fixed.map((finding) => ({
+      ruleId: finding.ruleId,
+      title: finding.title,
+      severity: finding.severity,
+    })),
+    reportUrl: plan.reportUrl,
+    compareUrl: plan.compareUrl,
   };
-  const send = deps.deliverEmail ?? sendEmail;
-  const outcome: EmailOutcome = await send(message);
+}
 
-  const delivery: DigestDelivery = {
-    channel: "digest",
-    target: recipients.join(", "),
-    status: outcome.ok ? "sent" : outcome.detail === "email_not_configured" ? "skipped" : "failed",
-    detail: outcome.detail,
-  };
+export interface DigestDelivery {
+  channel: "digest" | "webhook";
+  target: string;
+  status: "sent" | "failed" | "skipped";
+  detail: string;
+}
 
-  await insertNotification({
-    monitorId: monitor.id,
-    scanId: last.id,
-    channel: "digest",
-    target: delivery.target,
-    status: delivery.status,
-    detail: delivery.detail,
-    payload: message as unknown as Record<string, unknown>,
-  });
+/**
+ * Builds and sends the digest email for one monitor. Used by both the scheduled
+ * endpoint and the manual "Send digest" action.
+ */
+export async function sendDigestForMonitor(
+  monitor: MonitorRow,
+  deps: DigestDeps = {},
+): Promise<DigestDelivery[]> {
+  const recipients = digestRecipients(monitor);
+  const webhookUrl = monitor.notifyWebhookUrl;
+  if (recipients.length === 0 && !webhookUrl) return [];
 
-  if (outcome.ok) {
+  const prepared = await prepareDigest(monitor, deps);
+  if (!prepared) return [];
+  const { plan, lastScanId } = prepared;
+  const now = deps.now ?? new Date();
+  const deliveries: DigestDelivery[] = [];
+
+  if (recipients.length > 0) {
+    const message = {
+      to: recipients,
+      subject: plan.subject,
+      text: plan.text,
+      html: plan.html,
+    };
+    const send = deps.deliverEmail ?? sendEmail;
+    const outcome: EmailOutcome = await send(message);
+    const delivery: DigestDelivery = {
+      channel: "digest",
+      target: recipients.join(", "),
+      status: outcome.ok ? "sent" : outcome.detail === "email_not_configured" ? "skipped" : "failed",
+      detail: outcome.detail,
+    };
+    deliveries.push(delivery);
+    await insertNotification({
+      monitorId: monitor.id,
+      scanId: lastScanId,
+      channel: "digest",
+      target: delivery.target,
+      status: delivery.status,
+      detail: delivery.detail,
+      payload: message as unknown as Record<string, unknown>,
+    });
+  }
+
+  if (webhookUrl) {
+    const send = deps.deliverWebhook ?? sendWebhookWithRetry;
+    const payload = digestWebhookPayload(plan, monitor);
+    const signingSecret =
+      deps.signPayload === false ? null : await ensureWebhookSecret(monitor);
+    const outcome = await send(webhookUrl, payload, {
+      allowPrivate: deps.allowPrivate,
+      signingSecret,
+    });
+    const attempts = outcome.attempts ?? 1;
+    const delivery: DigestDelivery = {
+      channel: "webhook",
+      target: webhookUrl,
+      status: outcome.ok ? "sent" : "failed",
+      detail: attempts > 1 ? `${outcome.detail} (${attempts} attempts)` : outcome.detail,
+    };
+    deliveries.push(delivery);
+    await insertNotification({
+      monitorId: monitor.id,
+      scanId: lastScanId,
+      channel: "webhook",
+      target: webhookUrl,
+      status: delivery.status,
+      detail: delivery.detail,
+      attempts,
+      payload: payload as unknown as Record<string, unknown>,
+    });
+  }
+
+  if (deliveries.some((delivery) => delivery.status === "sent")) {
     await updateMonitor(monitor.id, { lastDigestAt: now });
   }
 
-  return [delivery];
+  return deliveries;
 }
 
 export interface DigestRunSummary {
@@ -261,14 +393,15 @@ export async function runDigests(deps: DigestDeps = {}): Promise<DigestRunSummar
   const now = deps.now ?? new Date();
   const monitors = await listMonitors();
   const summary: DigestRunSummary = { checked: 0, sent: 0, skipped: 0, results: [] };
-
-  if (!emailConfigured() && !deps.deliverEmail) {
-    return summary;
-  }
+  const emailReady = emailConfigured() || Boolean(deps.deliverEmail);
 
   for (const monitor of monitors) {
     const frequency = isDigestFrequency(monitor.digestFrequency) ? monitor.digestFrequency : "off";
-    if (!monitor.active || frequency === "off" || digestRecipients(monitor).length === 0) continue;
+    if (!monitor.active || frequency === "off") continue;
+    const hasEmail = digestRecipients(monitor).length > 0;
+    const hasWebhook = Boolean(monitor.notifyWebhookUrl);
+    if (!hasEmail && !hasWebhook) continue;
+    if (hasEmail && !hasWebhook && !emailReady) continue;
     if (!isDigestDue(frequency, monitor.lastDigestAt, now)) continue;
 
     summary.checked += 1;

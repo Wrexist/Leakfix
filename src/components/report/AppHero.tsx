@@ -9,7 +9,7 @@ import { scoreSummary } from "@/lib/scan/score";
 import { SCAN_KIND_LABEL } from "@/lib/scan/types";
 
 import { SeveritySummary } from "../SeveritySummary";
-import { PrintButton } from "./PrintButton";
+import { ExportMenu } from "./ExportMenu";
 import { RescanButton } from "./RescanButton";
 import { ScoreRing } from "./ScoreRing";
 import { ShareButton } from "./ShareButton";
@@ -113,7 +113,7 @@ export function AppHero({ scan, score }: { scan: ScanDto; score: number }) {
             ) : null}
             <RescanButton url={scan.normalizedUrl} />
             <ShareButton />
-            <PrintButton />
+            <ExportMenu scanId={scan.id} />
             <Link
               href="/"
               className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas"

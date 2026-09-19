@@ -123,6 +123,28 @@ test("monitors a target", async ({ page }) => {
 
   await page.getByRole("button", { name: /send digest now/i }).click();
   await expect(page.getByText(/digest: sent/i)).toBeVisible({ timeout: 15_000 });
+
+  await expect(page.getByRole("link", { name: /preview digest/i })).toBeVisible();
+});
+
+test("exports a report as CSV and Markdown", async ({ page, request }) => {
+  await page.goto("/");
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/leaky`);
+  await page.getByRole("button", { name: /find my leaks/i }).first().click();
+  await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+
+  const csvLink = page.getByRole("link", { name: /export csv/i });
+  await expect(csvLink).toBeVisible();
+  const href = await csvLink.getAttribute("href");
+  expect(href).toBeTruthy();
+
+  const csv = await request.get(href!);
+  expect(csv.ok()).toBe(true);
+  expect(await csv.text()).toContain("type,category,severity");
+
+  const markdown = await request.get(href!.replace("format=csv", "format=md"));
+  expect(markdown.ok()).toBe(true);
+  expect(await markdown.text()).toContain("# LeakFix report");
 });
 
 test("compares two scans side by side", async ({ page }) => {

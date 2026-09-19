@@ -296,6 +296,14 @@ export function MonitorNotifyForm({
         >
           {busy === "digest" ? "Sending…" : "Send digest now"}
         </button>
+        <a
+          href={`/api/monitors/${id}/digest/preview`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="inline-flex h-10 items-center justify-center rounded-lg border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas"
+        >
+          Preview digest
+        </a>
       </div>
 
       {message ? (

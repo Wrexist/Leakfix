@@ -44,6 +44,9 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 - **App Store listing checks** (iPhone + Android): name, icon, description
   length, screenshot count, star rating and rating volume, update freshness,
   localization, privacy policy link, and developer link.
+- **Exports**: download the report as **CSV** (findings + suggestions, with fixes)
+  or **Markdown**, or **Print / Save as PDF** from the browser. Endpoint:
+  `GET /api/scans/[id]/export?format=csv|md`.
 - A **finished report experience**: animated score, an “In short” executive
   summary, ranked action plan, priority and category tabs, expandable fix details
   with copy buttons, “what’s already working”, category breakdown, print, share

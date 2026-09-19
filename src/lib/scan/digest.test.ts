@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { digestRecipients, planDigest, type DigestScan } from "./digest";
+import {
+  digestRecipients,
+  planDigest,
+  scoreBarsHtml,
+  sparkline,
+  type DigestScan,
+} from "./digest";
 
 const scans: DigestScan[] = [
   { id: "s1", score: 60, createdAt: new Date("2026-09-12T09:00:00Z") },
@@ -28,6 +34,29 @@ describe("digestRecipients", () => {
     expect(
       digestRecipients({ notifyEmail: null, digestRecipients: ["  ", ""] } as never),
     ).toEqual([]);
+  });
+});
+
+describe("score visualisation", () => {
+  it("renders a sparkline of the same length as the input", () => {
+    const line = sparkline([40, 60, 80, 100]);
+    expect([...line]).toHaveLength(4);
+    expect(line[0] < line[3]).toBe(true);
+  });
+
+  it("returns an empty sparkline for a single point", () => {
+    expect(sparkline([50])).toBe("");
+  });
+
+  it("builds an email-safe bar chart", () => {
+    const html = scoreBarsHtml([40, 90]);
+    expect(html).toContain("<td");
+    expect(html).toContain("background:#c0272d");
+    expect(html).toContain("background:#0f7a56");
+  });
+
+  it("skips the chart when there is nothing to compare", () => {
+    expect(scoreBarsHtml([50])).toBe("");
   });
 });
 
@@ -68,6 +97,8 @@ describe("planDigest", () => {
     expect(plan?.text).toContain("Old problem");
     expect(plan?.reportUrl).toBe("https://leakfix.test/scan/s3");
     expect(plan?.compareUrl).toBe("https://leakfix.test/compare?a=s1&b=s3");
+    expect(plan?.sparkline.length).toBeGreaterThan(0);
+    expect(plan?.chartHtml).toContain("<td");
   });
 
   it("handles a single scan in the window", () => {

@@ -177,7 +177,12 @@ issues, with links to the report and the comparison.
 - Configure it on `/monitors` under **Notifications → Email digest**.
 - **Digest recipients** accepts a comma-separated list of addresses. When empty it
   falls back to the single alert email.
-- Send one immediately with **Send digest now**.
+- Digests include an **email-safe score chart** (a table-based bar chart) plus a
+  plain-text sparkline, so the trend is visible even in text-only clients.
+- If the monitor also has a webhook, the digest is posted there too (Slack,
+  Discord, or any endpoint) and is signed like every other delivery.
+- Send one immediately with **Send digest now**, or open **Preview digest** to see
+  the exact rendered email (`GET /api/monitors/[id]/digest/preview`).
 - Send all due digests on a schedule:
 
 ```
