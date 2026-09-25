@@ -7,6 +7,15 @@ import { isCronAuthorized } from "../auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Serverless time limit for one run; the loop below stops well before it. */
+export const maxDuration = 300;
+
+/** Stop starting new scans after this long, leaving headroom for in-flight ones. */
+const TIME_BUDGET_MS = 200_000;
+/** Scans run a few at a time: each is mostly waiting on the network. */
+const CONCURRENCY = 4;
+/** A URL scanned more recently than this is skipped, so a re-run resumes the backlog. */
+const RESCAN_AFTER_MS = 20 * 60 * 60 * 1000;
 
 interface RescanResult {
   id: string;
@@ -17,8 +26,10 @@ interface RescanResult {
 }
 
 /**
- * Re-scans every active monitor. Intended to be called by an external scheduler
- * (GitHub Actions, a cron job, or a platform cron) with a shared secret.
+ * Re-scans active monitors, least recently scanned first. Intended to be called
+ * daily by a scheduler (vercel.json crons, GitHub Actions, any cron) with a
+ * shared secret. Work is bounded by a time budget; anything left over is
+ * reported as `remaining` and picked up by the next run.
  *
  * Authorization: `Authorization: Bearer <CRON_SECRET>` or `x-cron-secret`.
  */
@@ -36,6 +47,7 @@ async function handle(request: Request): Promise<Response> {
     );
   }
 
+  const startedAt = Date.now();
   const monitors = (await listMonitors()).filter((monitor) => monitor.active);
   const results: RescanResult[] = [];
 
@@ -45,13 +57,19 @@ async function handle(request: Request): Promise<Response> {
     byUrl.set(monitor.normalizedUrl, [...(byUrl.get(monitor.normalizedUrl) ?? []), monitor]);
   }
 
-  for (const [url, group] of byUrl) {
+  const lastScanned = (group: typeof monitors) =>
+    Math.min(...group.map((monitor) => monitor.lastScannedAt?.getTime() ?? 0));
+  const queue = [...byUrl.entries()]
+    .filter(([, group]) => startedAt - lastScanned(group) >= RESCAN_AFTER_MS)
+    .sort(([, a], [, b]) => lastScanned(a) - lastScanned(b));
+
+  async function rescan(url: string, group: typeof monitors): Promise<void> {
     const created = await createScan(url);
     if (!created.ok) {
       for (const monitor of group) {
         results.push({ id: monitor.id, url, status: "skipped", score: null, code: created.code });
       }
-      continue;
+      return;
     }
 
     await runScan(created.id);
@@ -74,10 +92,21 @@ async function handle(request: Request): Promise<Response> {
     }
   }
 
+  // A small worker pool drains the queue until the time budget runs out.
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < queue.length && Date.now() - startedAt < TIME_BUDGET_MS) {
+      const [url, group] = queue[next++];
+      await rescan(url, group);
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
   return NextResponse.json({
     checked: results.length,
     completed: results.filter((result) => result.status === "completed").length,
     failed: results.filter((result) => result.status === "failed").length,
+    remaining: queue.length - Math.min(next, queue.length),
     results,
   });
 }

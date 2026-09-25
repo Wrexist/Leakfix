@@ -1,6 +1,6 @@
 import { after, NextResponse } from "next/server";
 
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { createScan, runScan } from "@/lib/scan/orchestrator";
 import { createScanSchema } from "@/lib/validation";
 
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const limit = checkRateLimit(`scan:${clientIp(request)}`, 10, 60_000);
+  const limit = await rateLimit(`scan:${clientIp(request)}`, 10, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       {

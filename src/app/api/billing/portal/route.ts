@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { userFromRequest } from "@/lib/auth/session";
 import { createPortalSession } from "@/lib/billing/stripe";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const limit = checkRateLimit(`portal:${user.id}:${clientIp(request)}`, 10, 60_000);
+  const limit = await rateLimit(`portal:${user.id}:${clientIp(request)}`, 10, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: { code: "RATE_LIMITED", message: "Too many attempts. Please wait a moment and try again." } },

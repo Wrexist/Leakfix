@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createCheckoutSession } from "@/lib/billing/stripe";
 import { devUnlockEnabled, paymentsConfigured } from "@/lib/billing/pricing";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { newOwner, ownerFromRequest, setOwnerCookie } from "@/lib/scan/monitor-owner";
 import { getScanById, grantEntitlement, isScanUnlocked } from "@/lib/scan/repository";
 
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 
   // Each call can create a Stripe Checkout Session; keep that bounded.
-  const limit = checkRateLimit(`unlock:${clientIp(request)}`, 10, 60_000);
+  const limit = await rateLimit(`unlock:${clientIp(request)}`, 10, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: { code: "RATE_LIMITED", message: "Too many attempts. Please wait a moment and try again." } },

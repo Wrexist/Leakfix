@@ -12,20 +12,32 @@ import {
   proIntervalShort,
 } from "@/lib/billing/pricing";
 import { TOTAL_CHECKS } from "@/lib/scan/catalog";
-import { SITE_NAME, SITE_URL, absoluteUrl, contactEmail } from "@/lib/site";
+import {
+  SITE_NAME,
+  SITE_URL,
+  absoluteUrl,
+  clampDescription,
+  contactEmail,
+  pageSocialMetadata,
+} from "@/lib/site";
 
 const PRICE = formatPrice();
 const PRO = `${formatProPrice()}/${proIntervalShort()}`;
 const PRO_PERIOD = PRO_PRICE.interval === "year" ? "year" : "month";
 
+const DESCRIPTION = clampDescription(
+  `Scan free: score, every issue, and the top fix. ${PRICE} once unlocks every fix for a site, or Pro (${PRO}) unlocks every report. 14-day money-back guarantee.`,
+);
+
 export const metadata: Metadata = {
   title: "Pricing",
-  description: `Scan any website or app listing free: score, every issue, and the top fix. Unlock every fix, copy-paste code, exports, and monitoring for one site for ${PRICE}, once — or get every report unlocked with Pro for ${PRO}.`,
+  description: DESCRIPTION,
   alternates: { canonical: "/pricing" },
-  openGraph: {
+  ...pageSocialMetadata({
     title: `LeakFix pricing — free scan, ${PRICE} one-time per site`,
-    url: "/pricing",
-  },
+    description: DESCRIPTION,
+    path: "/pricing",
+  }),
 };
 
 const FREE_FEATURES = [
@@ -201,7 +213,7 @@ export default function PricingPage() {
                   href="/#scan"
                   className="inline-flex h-11 w-full items-center justify-center rounded-xl border border-line-strong bg-white px-5 text-sm font-semibold text-ink transition-colors hover:bg-canvas"
                 >
-                  Run a free scan
+                  Get started free
                 </Link>
               </div>
             </div>
@@ -224,7 +236,7 @@ export default function PricingPage() {
                   href="/#scan"
                   className="inline-flex h-11 w-full items-center justify-center rounded-xl bg-brand px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark"
                 >
-                  Scan, then unlock
+                  Get started: scan, then unlock
                 </Link>
                 <p className="mt-3 text-center text-xs text-ink-faint">
                   You unlock from your report, after you have seen the issues.

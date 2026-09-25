@@ -24,10 +24,10 @@ function post(id: string, body: unknown, ip = "203.0.113.9") {
 }
 
 describe("email me this report", () => {
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllEnvs();
     vi.unstubAllGlobals();
-    resetRateLimits();
+    await resetRateLimits();
   });
 
   it("returns 503 when email isn't configured", async () => {

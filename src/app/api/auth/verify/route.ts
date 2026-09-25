@@ -7,7 +7,7 @@ import {
   findOrCreateUser,
 } from "@/lib/auth/accounts";
 import { safeNextPath, setSessionCookie } from "@/lib/auth/session";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { ownerFromRequest, setOwnerCookie } from "@/lib/scan/monitor-owner";
 
 export const runtime = "nodejs";
@@ -71,7 +71,7 @@ function isSameOrigin(request: Request): boolean {
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) return redirectTo("/login?error=expired");
 
-  const limit = checkRateLimit(`auth-verify:ip:${clientIp(request)}`, 20, 10 * 60_000);
+  const limit = await rateLimit(`auth-verify:ip:${clientIp(request)}`, 20, 10 * 60_000);
   if (!limit.allowed) return redirectTo("/login?error=expired");
 
   const form = await request.formData().catch(() => null);

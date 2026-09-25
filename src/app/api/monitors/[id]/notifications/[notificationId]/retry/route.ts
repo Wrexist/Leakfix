@@ -39,7 +39,7 @@ export async function POST(
     );
   }
 
-  const limited = limitMonitorAction(request, owner, "send", 10);
+  const limited = await limitMonitorAction(request, owner, "send", 10);
   if (limited) return limited;
 
   const delivery = await retryNotification(notificationId, {

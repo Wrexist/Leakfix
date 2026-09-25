@@ -330,3 +330,29 @@ export async function runScan(scanId: string): Promise<void> {
     log("scan_failed", { code: "INTERNAL_ERROR", durationMs: elapsed() }, "error");
   }
 }
+
+/** A scan that hasn't progressed for this long is treated as abandoned. */
+export const STALE_SCAN_MS = 3 * 60 * 1000;
+
+/**
+ * Fails a scan stuck in a non-terminal state (for example when a serverless
+ * function was stopped mid-scan), so the page stops polling forever and the
+ * visitor can retry. Returns true when the scan was marked failed.
+ */
+export async function failIfStale(
+  scan: { id: string; status: string; updatedAt: Date },
+  now: Date = new Date(),
+): Promise<boolean> {
+  const status: ScanStatus = isScanStatus(scan.status) ? scan.status : "queued";
+  if (status === "completed" || status === "failed") return false;
+  if (now.getTime() - scan.updatedAt.getTime() < STALE_SCAN_MS) return false;
+
+  await repository.updateScan(scan.id, {
+    status: "failed",
+    errorCode: "TIMEOUT",
+    errorMessage: userFacingScanError("TIMEOUT").message,
+    completedAt: now,
+  });
+  logEvent("scan_marked_stale", { scanId: scan.id, from: status }, "warn");
+  return true;
+}

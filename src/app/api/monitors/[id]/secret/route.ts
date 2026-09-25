@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const monitor = await getMonitorForOwner(id, owner.hash);
   if (!monitor) return monitorNotFound();
 
-  const limited = limitMonitorAction(request, owner, "secret", 10);
+  const limited = await limitMonitorAction(request, owner, "secret", 10);
   if (limited) return limited;
 
   const webhookSecret = await rotateWebhookSecret(monitor.id);

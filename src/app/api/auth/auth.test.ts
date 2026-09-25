@@ -100,9 +100,9 @@ async function monitorUrls(ownerHash: string): Promise<string[]> {
   return rows.map((row) => row.url).sort();
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   sentEmails = [];
-  resetRateLimits();
+  await resetRateLimits();
   stubEmail();
 });
 

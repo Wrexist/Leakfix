@@ -18,6 +18,13 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 
 ---
 
+## Deploying
+
+**Going live:** follow [docs/launch.md](docs/launch.md) — Vercel for hosting and
+scheduled jobs, Neon for a free Postgres database, Stripe, and Resend. It takes
+about an hour. `GET /api/health` (with the cron secret) reports whether every
+required setting is in place.
+
 ## What is real in this phase
 
 - A **real scan pipeline**: safe fetch → HTML extraction → modular checks →

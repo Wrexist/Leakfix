@@ -185,4 +185,14 @@ CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
 -- Merging a browser identity into an account looks rows up by owner/buyer hash.
 CREATE INDEX IF NOT EXISTS entitlements_buyer_idx ON entitlements (buyer_hash);
 CREATE INDEX IF NOT EXISTS report_leads_owner_idx ON report_leads (owner_hash);
+
+-- Shared fixed-window rate-limit counters (one row per limiter key).
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key text PRIMARY KEY,
+  count integer NOT NULL,
+  window_start timestamptz NOT NULL,
+  expires_at timestamptz NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS rate_limits_expires_at_idx ON rate_limits (expires_at);
 `;

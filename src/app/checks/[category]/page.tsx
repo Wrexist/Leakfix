@@ -11,7 +11,7 @@ import {
   getCategoryBySlug,
   type CheckTarget,
 } from "@/lib/scan/catalog";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, clampDescription, pageSocialMetadata } from "@/lib/site";
 
 export const dynamicParams = false;
 
@@ -32,14 +32,18 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const noun = count === 1 ? "check" : "checks";
   const targets = entry.targets.map((target) => TARGET_PHRASE[target]).join(" and ");
   const examples = entry.checks
-    .slice(0, 5)
+    .slice(0, 3)
     .map((check) => check.label)
     .join(", ");
+  const title = `${entry.label} checks (${count}) for ${targets}`;
+  const description = clampDescription(
+    `The ${count} ${entry.label} ${noun} LeakFix runs on ${targets}: ${examples}${count > 3 ? ", and more" : ""}. Free scan, no account.`,
+  );
   return {
-    title: `${entry.label} checks (${count}) for ${targets}`,
-    description: `The ${count} ${entry.label} ${noun} LeakFix runs on ${targets}: ${examples}${count > 5 ? ", and more" : ""}. Free scan, no account.`,
+    title,
+    description,
     alternates: { canonical: `/checks/${entry.slug}` },
-    openGraph: { url: `/checks/${entry.slug}` },
+    ...pageSocialMetadata({ title, description, path: `/checks/${entry.slug}` }),
   };
 }
 

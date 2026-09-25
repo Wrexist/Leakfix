@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 
 import { getDb } from "@/lib/db/client";
 import { monitors, type MonitorRow } from "@/lib/db/schema";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 import { generateWebhookSecret } from "./secrets";
 import type { ScanKind } from "./types";
@@ -91,15 +91,15 @@ export function monitorNotFound(): NextResponse {
  * Applies per-owner and per-IP fixed-window limits for one action bucket.
  * Returns a 429 response when either is exhausted, otherwise null.
  */
-export function limitMonitorAction(
+export async function limitMonitorAction(
   request: Request,
   owner: MonitorOwner | null,
   bucket: string,
   limit: number,
   windowMs = 60_000,
-): NextResponse | null {
-  const results = [checkRateLimit(`monitors:${bucket}:ip:${clientIp(request)}`, limit, windowMs)];
-  if (owner) results.push(checkRateLimit(`monitors:${bucket}:owner:${owner.hash}`, limit, windowMs));
+): Promise<NextResponse | null> {
+  const results = [await rateLimit(`monitors:${bucket}:ip:${clientIp(request)}`, limit, windowMs)];
+  if (owner) results.push(await rateLimit(`monitors:${bucket}:owner:${owner.hash}`, limit, windowMs));
 
   const blocked = results.find((result) => !result.allowed);
   if (!blocked) return null;

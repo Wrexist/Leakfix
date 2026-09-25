@@ -4,7 +4,7 @@ import { z } from "zod";
 import { LOGIN_TOKEN_TTL_MS, createLoginToken, normalizeAccountEmail } from "@/lib/auth/accounts";
 import { buildSignInEmail } from "@/lib/auth/email";
 import { safeNextPath } from "@/lib/auth/session";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { emailConfigured, sendEmail } from "@/lib/scan/email";
 import { ownerFromRequest } from "@/lib/scan/monitor-owner";
 import { absoluteUrl } from "@/lib/site";
@@ -51,9 +51,9 @@ export async function POST(request: Request) {
   }
   const email = normalizeAccountEmail(parsed.data.email);
 
-  const perIp = checkRateLimit(`auth-request:ip:${clientIp(request)}`, 5, 10 * 60_000);
+  const perIp = await rateLimit(`auth-request:ip:${clientIp(request)}`, 5, 10 * 60_000);
   if (!perIp.allowed) return tooMany(perIp.retryAfterMs);
-  const perEmail = checkRateLimit(`auth-request:to:${email}`, 3, 10 * 60_000);
+  const perEmail = await rateLimit(`auth-request:to:${email}`, 3, 10 * 60_000);
   if (!perEmail.allowed) return tooMany(perEmail.retryAfterMs);
 
   const token = await createLoginToken(email, ownerFromRequest(request)?.hash ?? null);

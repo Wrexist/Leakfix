@@ -57,3 +57,13 @@ describe("check catalog", () => {
     expect(total).toBe(TOTAL_CHECKS);
   });
 });
+
+describe("clampDescription", () => {
+  it("keeps short text and trims long text at a word boundary", async () => {
+    const { clampDescription } = await import("./site");
+    expect(clampDescription("Short and sweet.")).toBe("Short and sweet.");
+    const long = clampDescription("word ".repeat(60));
+    expect(long.length).toBeLessThanOrEqual(158);
+    expect(long.endsWith("word…")).toBe(true);
+  });
+});

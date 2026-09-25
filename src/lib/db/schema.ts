@@ -245,6 +245,22 @@ export const sessions = pgTable(
   ],
 );
 
+/**
+ * Shared fixed-window rate-limit counters (see `src/lib/rate-limit.ts`), so
+ * limits hold across serverless instances. Rows past `expires_at` are dead and
+ * swept opportunistically.
+ */
+export const rateLimits = pgTable(
+  "rate_limits",
+  {
+    key: text("key").primaryKey(),
+    count: integer("count").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [index("rate_limits_expires_at_idx").on(table.expiresAt)],
+);
+
 export type ScanRow = typeof scans.$inferSelect;
 export type NewScanRow = typeof scans.$inferInsert;
 export type FindingRow = typeof findings.$inferSelect;

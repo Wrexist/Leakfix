@@ -58,10 +58,14 @@ environment values.
 
 **Dependencies.** Versions are pinned intentionally in `package.json`.
 
-**Rate limiting.** `POST /api/scans` is limited to 10 scans per minute per client
-IP (`src/lib/rate-limit.ts`). This is an in-memory, single-instance limiter — a
-multi-instance deployment should back it with a shared store (Redis, Durable
-Object).
+**Rate limiting.** Abuse-sensitive endpoints (scan creation, report unlock and
+email, magic links, checkout/portal, monitor actions) use `rateLimit()` in
+`src/lib/rate-limit.ts`: a fixed-window counter in the shared `rate_limits` table,
+incremented atomically with one `INSERT ... ON CONFLICT DO UPDATE ... RETURNING`,
+so limits hold across serverless instances. Windows use the database clock.
+Expired rows are swept on ~1% of calls. If the database errors, the limiter logs
+`rate_limit_db_unavailable` once and falls back to a per-instance in-memory window
+— it fails open rather than blocking traffic.
 
 **Input and output size.** Request bodies are parsed with Zod. The fetcher caps
 response bodies at 2 MB and robots.txt at 200 KB. Rendered evidence is plain text
@@ -72,7 +76,6 @@ through React (no `dangerouslySetInnerHTML`).
 - **Egress allowlisting / proxy.** No network egress policy or isolation yet.
 - **Redirect to private IP via alternative encodings** beyond the WHATWG URL
   normalization already applied.
-- **Distributed rate limiting** (the current limiter is per-instance).
 - **Per-host allow/deny policy** and robots.txt awareness beyond detection.
 - **Managed secrets storage** and deployment-level network policy.
 - **CSP and hardened response headers.**

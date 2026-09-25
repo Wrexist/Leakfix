@@ -21,3 +21,39 @@ export function absoluteUrl(path = "/"): string {
 export function serializeJsonLd(data: unknown): string {
   return JSON.stringify(data).replace(/</g, "\\u003c");
 }
+
+/** Search engines truncate descriptions around 155–160 characters. */
+const MAX_DESCRIPTION = 158;
+
+/** Trims a meta description to a safe length at a word boundary. */
+export function clampDescription(text: string, max = MAX_DESCRIPTION): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max - 1);
+  return `${cut.slice(0, cut.lastIndexOf(" ")).replace(/[\s,;:—-]+$/, "")}…`;
+}
+
+/**
+ * Complete Open Graph + X card metadata for a page. A page-level `openGraph`
+ * replaces the layout's entirely in Next.js (it is not merged), so pages must
+ * restate the site name, type, description, and the shared preview image.
+ */
+export function pageSocialMetadata(input: { title: string; description: string; path: string }) {
+  const image = { url: absoluteUrl("/opengraph-image"), width: 1200, height: 630, alt: SITE_NAME };
+  return {
+    openGraph: {
+      type: "website" as const,
+      siteName: SITE_NAME,
+      title: input.title,
+      description: input.description,
+      url: absoluteUrl(input.path),
+      images: [image],
+    },
+    twitter: {
+      card: "summary_large_image" as const,
+      title: input.title,
+      description: input.description,
+      images: [image.url],
+    },
+  };
+}

@@ -12,13 +12,18 @@ import {
   TOTAL_RULES,
   WEBSITE_CHECK_COUNT,
 } from "@/lib/scan/catalog";
-import { absoluteUrl } from "@/lib/site";
+import { absoluteUrl, clampDescription, pageSocialMetadata } from "@/lib/site";
+
+const TITLE = `Website & app audit checks: all ${TOTAL_CHECKS}`;
+const DESCRIPTION = clampDescription(
+  `All ${TOTAL_CHECKS} checks LeakFix runs: ${WEBSITE_CHECK_COUNT} for websites and ${APP_CHECK_COUNT} for app store listings, from security headers to accessibility.`,
+);
 
 export const metadata: Metadata = {
-  title: `Website & app audit checks: all ${TOTAL_CHECKS}`,
-  description: `The full list of ${TOTAL_CHECKS} checks LeakFix runs — ${WEBSITE_CHECK_COUNT} for websites and ${APP_CHECK_COUNT} for App Store and Google Play listings — across ${CATEGORY_DETAILS.length} categories, from security headers to accessibility.`,
+  title: TITLE,
+  description: DESCRIPTION,
   alternates: { canonical: "/checks" },
-  openGraph: { url: "/checks" },
+  ...pageSocialMetadata({ title: TITLE, description: DESCRIPTION, path: "/checks" }),
 };
 
 export default function ChecksIndexPage() {

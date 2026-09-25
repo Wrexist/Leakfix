@@ -44,9 +44,9 @@ async function signedIn(email: string) {
   return { user, session: await createSession(user.id) };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   calls = [];
-  resetRateLimits();
+  await resetRateLimits();
 });
 
 afterEach(() => {

@@ -56,7 +56,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const existingOwner = ownerFromRequest(request);
-  const limited = limitMonitorAction(request, existingOwner, "create", 10);
+  const limited = await limitMonitorAction(request, existingOwner, "create", 10);
   if (limited) return limited;
 
   let body: unknown;

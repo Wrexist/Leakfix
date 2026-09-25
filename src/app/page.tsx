@@ -21,7 +21,8 @@ import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 export const metadata: Metadata = {
   title: "LeakFix — Find what's costing you customers",
   description:
-    "Paste your website. LeakFix runs real checks across SEO, security, accessibility, mobile, performance, trust, and conversion — then ranks the exact fixes. Free scan and score, no account. Full fix plan is a one-time unlock.",
+    "Paste your URL. LeakFix checks SEO, security, accessibility, speed, and conversion, then ranks the exact fixes. Free scan, no account needed.",
+  alternates: { canonical: "/" },
 };
 
 const STATS: StatItem[] = [

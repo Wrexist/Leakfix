@@ -76,8 +76,8 @@ afterAll(async () => {
   await disposeDb();
 });
 
-beforeEach(() => {
-  resetRateLimits();
+beforeEach(async () => {
+  await resetRateLimits();
 });
 
 describe("monitor ownership", () => {

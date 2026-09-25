@@ -155,6 +155,26 @@ const CTA_PATTERNS = [
   "join",
 ];
 
+/**
+ * A submit button on a form that collects an email, URL, phone, or name is a
+ * primary action whatever its wording ("Find my leaks", "Get my quote").
+ * Search boxes don't count.
+ */
+function isLeadFormSubmit(button: HTMLElement): boolean {
+  const type = (button.getAttribute("type") ?? "submit").toLowerCase();
+  if (type !== "submit") return false;
+  const form = button.closest("form");
+  if (!form || form.getAttribute("role") === "search") return false;
+  const inputs = form.querySelectorAll("input");
+  if (inputs.some((input) => (input.getAttribute("type") ?? "").toLowerCase() === "search")) return false;
+  return inputs.some((input) =>
+    ["email", "url", "tel", "text", ""].includes((input.getAttribute("type") ?? "").toLowerCase()),
+  );
+}
+
+const CHECKOUT_HREF = /\/(cart|basket|bag|checkout)(\/|$|\?|#)/i;
+const CHECKOUT_TEXT = /^(checkout|check out|view (cart|bag|basket)|(my |your )?(cart|bag|basket)(\s*\(\d+\))?)$/i;
+
 const TRUST_PATTERNS = [
   "privacy",
   "terms",
@@ -444,6 +464,9 @@ export function extractPage(
   let targetBlankWithoutRel = 0;
   let emptyHashLinks = 0;
   const ctaSet = new Set<string>();
+  // A cart/checkout link or button — not just the word "checkout" in prose,
+  // which legal and FAQ pages use ("taxes shown at checkout").
+  let hasCheckoutControl = false;
   let hasContactSignal = false;
   let hasTrustSignal = false;
   let hasEmailLink = false;
@@ -458,6 +481,7 @@ export function extractPage(
   for (const anchor of anchors) {
     const href = anchor.getAttribute("href")?.trim() ?? "";
     const text = clean(anchor.text) ?? "";
+    if (CHECKOUT_HREF.test(href) || CHECKOUT_TEXT.test(text)) hasCheckoutControl = true;
 
     if (href && !hasAccessibleText(anchor)) emptyLinks += 1;
     if (text && GENERIC_LINK_TEXT.has(text.toLowerCase())) genericLinkText += 1;
@@ -512,9 +536,12 @@ export function extractPage(
   for (const button of buttons) {
     if (!hasAccessibleText(button) && clean(button.getAttribute("value")) == null) emptyButtons += 1;
     const text = clean(button.text) ?? "";
+    if (CHECKOUT_TEXT.test(text)) hasCheckoutControl = true;
     if (ctaSet.size < MAX_CTA && text.length > 0 && text.length <= 40) {
       const lowered = text.toLowerCase();
-      if (CTA_PATTERNS.some((pattern) => lowered.includes(pattern))) ctaSet.add(text);
+      if (CTA_PATTERNS.some((pattern) => lowered.includes(pattern)) || isLeadFormSubmit(button)) {
+        ctaSet.add(text);
+      }
     }
   }
 
@@ -574,7 +601,11 @@ export function extractPage(
   let renderBlockingScripts = 0;
   for (const script of headScripts) {
     const a = attrs(script);
-    if (a.async == null && a.defer == null && (a.type ?? "").toLowerCase() !== "module") {
+    const type = (a.type ?? "").toLowerCase();
+    // `nomodule` scripts are never fetched by browsers that support modules (all
+    // current ones), and non-JavaScript types (JSON, templates) never execute.
+    const isJavaScript = type === "" || type === "text/javascript" || type === "application/javascript";
+    if (a.async == null && a.defer == null && a.nomodule == null && isJavaScript) {
       renderBlockingScripts += 1;
     }
   }
@@ -609,9 +640,12 @@ export function extractPage(
 
   const jsonLd = extractJsonLd(root);
   const hasAddress = root.querySelector("address") != null;
+  // Needs structured data, a weekday range, or the word "hours" followed by an
+  // actual time — merely mentioning "opening hours" (e.g. in an article) is not enough.
   const hasOpeningHours =
-    /"openinghours"/i.test(html) ||
-    /opening hours|mon(day)?\s*[-–—]\s*fri|hours:\s*\d/i.test(bodyTextLower);
+    /"openinghours/i.test(html) ||
+    /\bmon(day)?\s*[-–—]\s*(fri|sat|sun)/i.test(bodyTextLower) ||
+    /\bhours\b[^.\n]{0,60}?\b\d{1,2}(:\d{2})?\s*(am|pm|[-–—]\s*\d)/i.test(bodyTextLower);
   const hasMapEmbed =
     /google\.[a-z.]+\/maps|maps\.google|google\.com\/maps/i.test(html) ||
     root
@@ -700,7 +734,7 @@ export function extractPage(
     hasShareControls,
     store: {
       hasAddToCart: /add to (cart|bag|basket)/.test(bodyTextLower),
-      hasCheckout: /(proceed to (checkout|payment)|go to checkout|\bcheckout\b)/.test(bodyTextLower),
+      hasCheckout: hasCheckoutControl || /proceed to (checkout|payment)|go to checkout/.test(bodyTextLower),
       hasPrice: /(?:[$£€]\s?\d[\d.,]*)|(?:\d[\d.,]*\s?(?:usd|eur|gbp))/.test(bodyTextLower),
       hasReturnsLink,
       hasShippingLink,

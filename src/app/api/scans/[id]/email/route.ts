@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { toScanDto } from "@/lib/scan/dto";
 import { emailConfigured, sendEmail } from "@/lib/scan/email";
 import { buildReportEmail } from "@/lib/scan/lead-emails";
@@ -59,9 +59,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
   const email = normalizeEmail(parsed.data.email);
 
-  const perIp = checkRateLimit(`report-email:ip:${clientIp(request)}`, 5, 10 * 60_000);
+  const perIp = await rateLimit(`report-email:ip:${clientIp(request)}`, 5, 10 * 60_000);
   if (!perIp.allowed) return tooMany(perIp.retryAfterMs);
-  const perRecipient = checkRateLimit(`report-email:to:${email}`, 3, 24 * 60 * 60_000);
+  const perRecipient = await rateLimit(`report-email:to:${email}`, 3, 24 * 60 * 60_000);
   if (!perRecipient.allowed) return tooMany(perRecipient.retryAfterMs);
 
   const scan = await getScanById(id);

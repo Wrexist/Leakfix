@@ -4,7 +4,7 @@ import { isProActive } from "@/lib/auth/pro";
 import { userFromRequest } from "@/lib/auth/session";
 import { proConfigured } from "@/lib/billing/pricing";
 import { createSubscriptionCheckoutSession } from "@/lib/billing/stripe";
-import { checkRateLimit, clientIp } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const limit = checkRateLimit(`subscribe:${user.id}:${clientIp(request)}`, 10, 60_000);
+  const limit = await rateLimit(`subscribe:${user.id}:${clientIp(request)}`, 10, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: { code: "RATE_LIMITED", message: "Too many attempts. Please wait a moment and try again." } },

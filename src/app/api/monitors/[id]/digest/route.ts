@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     );
   }
 
-  const limited = limitMonitorAction(request, owner, "send", 10);
+  const limited = await limitMonitorAction(request, owner, "send", 10);
   if (limited) return limited;
 
   const deliveries = await sendDigestForMonitor(monitor);

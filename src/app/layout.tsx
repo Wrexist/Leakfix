@@ -11,7 +11,7 @@ import { SITE_NAME, SITE_URL, absoluteUrl, contactEmail } from "@/lib/site";
 import "./globals.css";
 
 const DESCRIPTION =
-  "Paste your website. LeakFix runs real checks across SEO, security, accessibility, mobile, performance, trust, and conversion — then ranks the exact fixes. Free scan and score, no account. Full fix plan is a one-time unlock.";
+  "Paste your URL. LeakFix checks SEO, security, accessibility, speed, and conversion, then ranks the exact fixes. Free scan, no account needed.";
 
 /** Cookie-free funnel analytics; off unless a Plausible domain is configured. */
 const PLAUSIBLE_DOMAIN = process.env.NEXT_PUBLIC_PLAUSIBLE_DOMAIN;

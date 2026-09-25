@@ -55,7 +55,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const { owner, monitor } = await loadOwned(request, id);
   if (!owner || !monitor) return monitorNotFound();
 
-  const limited = limitMonitorAction(request, owner, "update", 30);
+  const limited = await limitMonitorAction(request, owner, "update", 30);
   if (limited) return limited;
 
   let body: unknown;
@@ -140,7 +140,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const { owner, monitor } = await loadOwned(request, id);
   if (!owner || !monitor) return monitorNotFound();
 
-  const limited = limitMonitorAction(request, owner, "scan", 10);
+  const limited = await limitMonitorAction(request, owner, "scan", 10);
   if (limited) return limited;
 
   const created = await createScan(monitor.normalizedUrl);
