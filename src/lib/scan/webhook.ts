@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
-import { resolveAndValidateHost } from "./fetcher";
+import { classifyFetchError, resolveAndValidateHost } from "./fetcher";
+import { withPinnedDispatcher } from "./pinned-dns";
 import { validateUrlInput } from "./url";
 
 export interface DeliveryOutcome {
@@ -81,8 +82,9 @@ export function buildWebhookRequest(
 /**
  * Sends a JSON webhook with the same network-target policy as the scanner:
  * https only (unless explicitly allowed for tests), DNS re-validation, and
- * private/loopback ranges blocked. This prevents notification URLs from being
- * used as an SSRF primitive.
+ * private/loopback ranges blocked, with the connection pinned to the validated
+ * address (see pinned-dns.ts). This prevents notification URLs from being used
+ * as an SSRF primitive, including via DNS rebinding.
  */
 export async function sendWebhook(
   url: string,
@@ -108,13 +110,19 @@ export async function sendWebhook(
   const request = buildWebhookRequest(payload, { signingSecret: options.signingSecret });
 
   try {
-    const response = await fetch(validation.target.href, {
-      method: "POST",
-      redirect: "manual",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: request.headers,
-      body: request.body,
-    });
+    const response = await fetch(
+      validation.target.href,
+      withPinnedDispatcher(
+        {
+          method: "POST",
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: request.headers,
+          body: request.body,
+        },
+        allowPrivate,
+      ),
+    );
     await response.body?.cancel().catch(() => undefined);
     return {
       ok: response.status >= 200 && response.status < 300,
@@ -122,6 +130,10 @@ export async function sendWebhook(
       detail: `http_${response.status}`,
     };
   } catch (error) {
+    // A connect-time rebinding block is permanent, so it must not be retried.
+    if (classifyFetchError(error).code === "BLOCKED_TARGET") {
+      return { ok: false, status: null, detail: "blocked_BLOCKED_TARGET" };
+    }
     const name = (error as { name?: string }).name ?? "error";
     return { ok: false, status: null, detail: `network_${name}` };
   }

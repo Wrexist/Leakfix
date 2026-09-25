@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { adoptBrowserIdentity, findOrCreateUser, updateUserBilling } from "@/lib/auth/accounts";
+import { PRO_PRICE } from "@/lib/billing/pricing";
 import { disposeDb } from "@/lib/db/client";
 import { resetRateLimits } from "@/lib/rate-limit";
-import { generateOwnerId, OWNER_COOKIE } from "@/lib/scan/monitor-owner";
+import { createMonitorForOwner, generateOwnerId, OWNER_COOKIE } from "@/lib/scan/monitor-owner";
 import {
   createMonitor,
   getMonitorById,
@@ -228,5 +230,50 @@ describe("monitor ownership", () => {
     }
     expect(statuses.slice(0, 10).every((status) => status === 200)).toBe(true);
     expect(statuses[10]).toBe(429);
+  });
+});
+
+describe("monitoring with Pro", () => {
+  async function proOwner(email: string): Promise<{ id: string; hash: string }> {
+    const user = await findOrCreateUser(email);
+    const owner = await adoptBrowserIdentity(user, null, null);
+    await updateUserBilling(user.id, {
+      plan: "pro",
+      subscriptionStatus: "active",
+      currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    });
+    return owner;
+  }
+
+  it("lets a Pro subscriber monitor a site without buying its report", async () => {
+    const owner = await proOwner("pro-monitor@example.test");
+    const url = "https://pro-monitor-anything.com/";
+
+    const stranger = await POST(jsonRequest("/api/monitors", { method: "POST", owner: generateOwnerId(), body: { url } }));
+    expect(stranger.status).toBe(402);
+
+    const response = await POST(jsonRequest("/api/monitors", { method: "POST", owner: owner.id, body: { url } }));
+    expect(response.status).toBe(201);
+  });
+
+  it("caps Pro-only monitors at the plan limit", async () => {
+    const owner = await proOwner("pro-limit@example.test");
+    for (let index = 0; index < PRO_PRICE.monitorLimit; index += 1) {
+      await createMonitorForOwner({
+        ownerHash: owner.hash,
+        normalizedUrl: normalized(`https://pro-limit-${index}.com/`),
+        kind: "website",
+      });
+    }
+
+    const response = await POST(
+      jsonRequest("/api/monitors", { method: "POST", owner: owner.id, body: { url: "https://pro-limit-extra.com/" } }),
+    );
+    expect(response.status).toBe(403);
+    expect(((await response.json()) as { error: { code: string } }).error.code).toBe("MONITOR_LIMIT");
+
+    // A site with a purchased report is still included with that purchase.
+    const purchased = await POST(jsonRequest("/api/monitors", { method: "POST", owner: owner.id, body: { url: TARGET } }));
+    expect([200, 201]).toContain(purchased.status);
   });
 });

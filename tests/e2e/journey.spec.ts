@@ -1,6 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 import { FIXTURE_ORIGIN } from "./constants";
+
+/** Unlocks the current report with the dev unlock. Unlocks belong to the buyer's
+ * browser, and every test runs in a fresh browser, so each test unlocks its own. */
+async function unlockReport(page: Page) {
+  const unlock = page.getByRole("button", { name: /unlock full report \(dev\)/i });
+  await unlock.scrollIntoViewIfNeeded();
+  await unlock.click();
+  await expect(page.getByText("Fix details locked")).toHaveCount(0, { timeout: 15_000 });
+}
 
 test("homepage presents one focused action", async ({ page }) => {
   await page.goto("/");
@@ -108,6 +117,7 @@ test("monitors a target", async ({ page }) => {
   await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/good`);
   await page.getByRole("button", { name: /find my leaks/i }).first().click();
   await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+  await unlockReport(page);
 
   await page.getByRole("button", { name: /monitor this target/i }).click();
   await expect(page.getByRole("link", { name: /manage monitors/i })).toBeVisible({
@@ -150,6 +160,7 @@ test("exports a report as CSV and Markdown", async ({ page, request }) => {
   await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/good`);
   await page.getByRole("button", { name: /find my leaks/i }).first().click();
   await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+  await unlockReport(page);
 
   const csvLink = page.getByRole("link", { name: /export csv/i });
   await expect(csvLink).toBeVisible();
@@ -199,4 +210,45 @@ test("has no horizontal overflow on a phone-sized viewport", async ({ page }) =>
     () => document.documentElement.scrollWidth - window.innerWidth,
   );
   expect(reportOverflow).toBeLessThanOrEqual(1);
+});
+
+test("signs in with a magic link and lands on the account page", async ({ page, request }) => {
+  const email = "e2e-signin@example.test";
+  await page.goto("/login");
+  await expect(page.getByRole("heading", { name: /sign in to leakfix/i })).toBeVisible();
+  await page.getByLabel("Email address").fill(email);
+  await page.getByRole("button", { name: /email me a sign-in link/i }).click();
+  await expect(page.getByText(/check your inbox/i)).toBeVisible();
+
+  // Read the link back from the fixture email provider.
+  const sent = await request.get(`${FIXTURE_ORIGIN}/emails/last?to=${encodeURIComponent(email)}`);
+  expect(sent.ok()).toBe(true);
+  const { text } = (await sent.json()) as { text: string };
+  const link = text.match(/https?:\/\/\S+\/api\/auth\/verify\?\S+/)?.[0];
+  expect(link).toBeTruthy();
+  const { pathname, search } = new URL(link!);
+
+  // The link opens a confirm page; signing in takes a click (email scanners only GET).
+  await page.goto(`${pathname}${search}`);
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByRole("heading", { name: /your account/i })).toBeVisible();
+  await expect(page.getByText(email)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Account", exact: true })).toBeVisible();
+
+  // The link is single-use.
+  await page.goto(`${pathname}${search}`);
+  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await expect(page).toHaveURL(/\/login\?error=expired$/);
+
+  await page.goto("/account");
+  await page.getByRole("button", { name: /sign out/i }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+
+  // The extra header link still fits on a phone.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
 });

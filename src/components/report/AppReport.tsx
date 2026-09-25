@@ -7,6 +7,7 @@ import type { ScanHistoryData } from "@/lib/scan/history";
 import { ActionPlan } from "./ActionPlan";
 import { AppHero } from "./AppHero";
 import { CategoryBreakdown } from "./CategoryBreakdown";
+import { EmailReport } from "./EmailReport";
 import { ExecutiveSummary } from "./ExecutiveSummary";
 import { FindingList } from "./FindingList";
 import { MethodologyNote } from "./MethodologyNote";
@@ -47,12 +48,14 @@ export function AppReport({
         price={billing.price}
         paymentsReady={billing.paymentsReady}
         devUnlock={billing.devUnlock}
+        proPrice={billing.proPrice ?? null}
       />
       <Suggestions
         suggestions={scan.insights?.suggestions ?? []}
         locked={!scan.unlocked}
         lockedCount={scan.lockedSuggestionCount}
       />
+      <EmailReport scanId={scan.id} locked={!scan.unlocked} />
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

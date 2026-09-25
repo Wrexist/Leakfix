@@ -48,6 +48,18 @@ export function SiteFooter() {
         </div>
         <p className="mt-8 border-t border-line pt-6 text-sm text-ink-faint">
           © {year} LeakFix
+          <span aria-hidden="true"> · </span>
+          <Link href="/terms" className="transition-colors hover:text-ink">
+            Terms
+          </Link>
+          <span aria-hidden="true"> · </span>
+          <Link href="/privacy" className="transition-colors hover:text-ink">
+            Privacy
+          </Link>
+          <span aria-hidden="true"> · </span>
+          <Link href="/refunds" className="transition-colors hover:text-ink">
+            Refunds
+          </Link>
         </p>
       </div>
     </footer>

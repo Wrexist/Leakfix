@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AccountNavLink } from "./account/AccountNavLink";
 import { Logo } from "./Logo";
 
 const NAV_LINK = "text-sm font-medium text-ink-soft transition-colors hover:text-ink";
@@ -21,9 +22,10 @@ export function SiteHeader() {
           <Link href="/monitors" className={`hidden sm:inline-flex ${NAV_LINK}`}>
             Monitors
           </Link>
-          <Link href="/#faq" className={`hidden sm:inline-flex ${NAV_LINK}`}>
+          <Link href="/#faq" className={`hidden lg:inline-flex ${NAV_LINK}`}>
             FAQ
           </Link>
+          <AccountNavLink className={`inline-flex ${NAV_LINK}`} />
           <Link
             href="/#scan"
             className="inline-flex h-9 shrink-0 items-center justify-center rounded-lg bg-ink px-4 text-sm font-semibold text-white transition-colors hover:bg-black"

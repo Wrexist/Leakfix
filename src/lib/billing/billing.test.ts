@@ -2,8 +2,14 @@ import { createHmac } from "node:crypto";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { devUnlockEnabled, formatPrice, paymentsConfigured } from "./pricing";
-import { buildCheckoutRequest, verifyStripeSignature } from "./stripe";
+import { PRO_PRICE, devUnlockEnabled, formatPrice, formatProPrice, paymentsConfigured, proConfigured } from "./pricing";
+import {
+  buildCheckoutRequest,
+  buildPortalRequest,
+  buildSubscriptionCheckoutRequest,
+  createPortalSession,
+  verifyStripeSignature,
+} from "./stripe";
 
 const SECRET = "whsec_test";
 
@@ -67,6 +73,70 @@ describe("buildCheckoutRequest", () => {
   });
 });
 
+describe("buildSubscriptionCheckoutRequest", () => {
+  const base = {
+    userId: "user-1",
+    successUrl: "https://leakfix.test/account?subscribed=1",
+    cancelUrl: "https://leakfix.test/pricing",
+  };
+
+  it("builds a recurring subscription from the displayed price", () => {
+    const { url, params } = buildSubscriptionCheckoutRequest({
+      ...base,
+      email: "pro@example.test",
+      amount: { cents: 2900, currency: "usd", name: "LeakFix Pro", interval: "month" },
+    });
+    expect(url).toBe("https://api.stripe.com/v1/checkout/sessions");
+    expect(params.get("mode")).toBe("subscription");
+    expect(params.get("line_items[0][price_data][unit_amount]")).toBe("2900");
+    expect(params.get("line_items[0][price_data][recurring][interval]")).toBe("month");
+    expect(params.get("client_reference_id")).toBe("user-1");
+    expect(params.get("metadata[userId]")).toBe("user-1");
+    expect(params.get("subscription_data[metadata][userId]")).toBe("user-1");
+    expect(params.get("customer_email")).toBe("pro@example.test");
+    expect(params.get("allow_promotion_codes")).toBe("true");
+    expect(params.get("metadata[scanId]")).toBeNull();
+  });
+
+  it("prefers an existing customer and a configured Price", () => {
+    const { params } = buildSubscriptionCheckoutRequest({
+      ...base,
+      customerId: "cus_1",
+      email: "pro@example.test",
+      priceId: "price_pro",
+    });
+    expect(params.get("customer")).toBe("cus_1");
+    expect(params.get("customer_email")).toBeNull();
+    expect(params.get("line_items[0][price]")).toBe("price_pro");
+  });
+
+  it("needs a price", () => {
+    expect(() => buildSubscriptionCheckoutRequest(base)).toThrow();
+  });
+});
+
+describe("billing portal", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("builds a portal session request", () => {
+    const { url, params } = buildPortalRequest({ customerId: "cus_2", returnUrl: "https://leakfix.test/account" });
+    expect(url).toBe("https://api.stripe.com/v1/billing_portal/sessions");
+    expect(params.get("customer")).toBe("cus_2");
+    expect(params.get("return_url")).toBe("https://leakfix.test/account");
+  });
+
+  it("reports Stripe errors without throwing", async () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_x");
+    const result = await createPortalSession(
+      { customerId: "cus_2", returnUrl: "https://leakfix.test/account" },
+      { fetchImpl: async () => Response.json({ error: { message: "No configuration" } }, { status: 400 }) },
+    );
+    expect(result).toEqual({ ok: false, detail: "stripe_http_400" });
+  });
+});
+
 describe("billing flags", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -99,5 +169,20 @@ describe("billing flags", () => {
 describe("formatPrice", () => {
   it("formats the configured price", () => {
     expect(formatPrice()).toContain("19");
+  });
+
+  it("formats the Pro price and defaults", () => {
+    expect(formatProPrice()).toContain("29");
+    expect(PRO_PRICE.interval).toBe("month");
+    expect(PRO_PRICE.monitorLimit).toBe(10);
+  });
+
+  it("offers Pro only when payments are configured", () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", "");
+    expect(proConfigured()).toBe(false);
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_x");
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_x");
+    expect(proConfigured()).toBe(true);
+    vi.unstubAllEnvs();
   });
 });

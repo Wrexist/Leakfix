@@ -1,21 +1,23 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { hasActivePro } from "@/lib/auth/pro";
+import { PRO_PRICE } from "@/lib/billing/pricing";
 import { allowPrivateTargets } from "@/lib/scan/orchestrator";
 import {
+  countMonitorsForOwner,
   createMonitorForOwner,
-  generateOwnerId,
   getMonitorForOwner,
   getMonitorForOwnerByUrl,
-  hashOwnerId,
   limitMonitorAction,
+  newOwner,
   listMonitorsForOwner,
   ownerFromRequest,
   setOwnerCookie,
   type MonitorOwner,
 } from "@/lib/scan/monitor-owner";
 import { toMonitorDto } from "@/lib/scan/monitors";
-import { getScansForUrl, hasEntitlementForUrl, updateMonitor } from "@/lib/scan/repository";
+import { getScansForUrl, hasPurchaseForUrl, updateMonitor } from "@/lib/scan/repository";
 import { detectScanKind } from "@/lib/scan/target";
 import { validateUrlInput } from "@/lib/scan/url";
 
@@ -83,7 +85,11 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!(await hasEntitlementForUrl(validation.target.href))) {
+  // A purchased report includes monitoring for its URL. Without one, Pro covers
+  // any URL up to the plan's monitor limit.
+  const purchased = await hasPurchaseForUrl(validation.target.href, existingOwner?.hash ?? null);
+  const viaPro = !purchased && (await hasActivePro(existingOwner?.hash ?? null));
+  if (!purchased && !viaPro) {
     return NextResponse.json(
       { error: { code: "PAYWALL", message: "Unlock a report for this target before monitoring it." } },
       { status: 402 },
@@ -94,14 +100,25 @@ export async function POST(request: Request) {
   let owner: MonitorOwner | null = existingOwner;
   let issueCookie = false;
   if (!owner) {
-    const id = generateOwnerId();
-    owner = { id, hash: hashOwnerId(id) };
+    owner = newOwner();
     issueCookie = true;
   }
 
   const existing = await getMonitorForOwnerByUrl(validation.target.href, owner.hash);
   if (existing) {
     return NextResponse.json({ monitor: toMonitorDto(existing), created: false });
+  }
+
+  if (viaPro && (await countMonitorsForOwner(owner.hash)) >= PRO_PRICE.monitorLimit) {
+    return NextResponse.json(
+      {
+        error: {
+          code: "MONITOR_LIMIT",
+          message: `Pro includes up to ${PRO_PRICE.monitorLimit} monitors. Remove one to add another.`,
+        },
+      },
+      { status: 403 },
+    );
   }
 
   const { row, created } = await createMonitorForOwner({

@@ -8,6 +8,7 @@ import {
   getScanById,
   isScanUnlocked,
 } from "@/lib/scan/repository";
+import { ownerFromRequest } from "@/lib/scan/monitor-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,7 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "Scan not found." } }, { status: 404 });
   }
 
-  const unlocked = await isScanUnlocked(scan);
+  const unlocked = await isScanUnlocked(scan, ownerFromRequest(request)?.hash ?? null);
   if (!unlocked) {
     return NextResponse.json(
       { error: { code: "PAYWALL", message: "Unlock the full report to export it." } },

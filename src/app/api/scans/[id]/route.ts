@@ -6,13 +6,14 @@ import {
   getScanById,
   isScanUnlocked,
 } from "@/lib/scan/repository";
+import { ownerFromRequest } from "@/lib/scan/monitor-owner";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   if (!ID_PATTERN.test(id)) {
@@ -26,7 +27,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const [findingRows, unlocked] = await Promise.all([
     getFindingsForScan(id),
-    isScanUnlocked(scan),
+    isScanUnlocked(scan, ownerFromRequest(request)?.hash ?? null),
   ]);
 
   return NextResponse.json(toScanDto(scan, findingRows, { unlocked }));

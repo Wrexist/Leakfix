@@ -23,6 +23,8 @@ export interface EmailMessage {
   subject: string;
   text: string;
   html: string;
+  /** Extra headers, e.g. `List-Unsubscribe` on follow-up emails (Resend accepts these). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -60,6 +62,7 @@ export async function sendEmail(
         subject: message.subject,
         text: message.text,
         html: message.html,
+        ...(message.headers ? { headers: message.headers } : {}),
       }),
     });
     await response.body?.cancel().catch(() => undefined);

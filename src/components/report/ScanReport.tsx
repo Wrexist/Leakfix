@@ -8,6 +8,7 @@ import type { ScanHistoryData } from "@/lib/scan/history";
 import { AppReport } from "./AppReport";
 import { ActionPlan } from "./ActionPlan";
 import { CategoryBreakdown } from "./CategoryBreakdown";
+import { EmailReport } from "./EmailReport";
 import { ExecutiveSummary } from "./ExecutiveSummary";
 import { FindingList } from "./FindingList";
 import { MethodologyNote } from "./MethodologyNote";
@@ -56,6 +57,7 @@ export function ScanReport({
         price={billing.price}
         paymentsReady={billing.paymentsReady}
         devUnlock={billing.devUnlock}
+        proPrice={billing.proPrice ?? null}
       />
       <SeoSnapshot seo={scan.insights?.seo ?? null} />
       <Suggestions
@@ -63,6 +65,7 @@ export function ScanReport({
         locked={!scan.unlocked}
         lockedCount={scan.lockedSuggestionCount}
       />
+      <EmailReport scanId={scan.id} locked={!scan.unlocked} />
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

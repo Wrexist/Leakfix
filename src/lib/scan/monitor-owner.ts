@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { and, desc, eq } from "drizzle-orm";
+import { and, count, desc, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { getDb } from "@/lib/db/client";
@@ -13,12 +13,17 @@ import type { ScanKind } from "./types";
 /**
  * Browser-scoped monitor ownership.
  *
- * There are no accounts, so a monitor belongs to the browser that created it:
+ * A monitor belongs to the browser identity that created it:
  * the first create sets a random, httpOnly owner cookie and the monitor row
  * stores only a SHA-256 hash of it. Every monitor API route resolves the owner
  * from the cookie and only sees rows with a matching hash. Rows with a NULL
  * owner (created before ownership existed) are invisible to the API; the cron
  * routes still process them.
+ *
+ * The same identity is the buyer for report unlocks (`entitlements.buyer_hash`),
+ * so one cookie covers both "my monitors" and "sites I paid for". Signing in
+ * sets this cookie to the account's identity (see `src/lib/auth/accounts.ts`),
+ * which is how both follow a user across devices.
  */
 export const OWNER_COOKIE = "lf_owner";
 
@@ -37,6 +42,12 @@ export function generateOwnerId(): string {
 
 export function hashOwnerId(ownerId: string): string {
   return createHash("sha256").update(ownerId).digest("hex");
+}
+
+/** A fresh browser identity; the caller sets it with `setOwnerCookie`. */
+export function newOwner(): MonitorOwner {
+  const id = generateOwnerId();
+  return { id, hash: hashOwnerId(id) };
 }
 
 /** Validates a raw cookie value and derives its hash; null when absent/invalid. */
@@ -113,6 +124,15 @@ export async function listMonitorsForOwner(ownerHash: string): Promise<MonitorRo
     .from(monitors)
     .where(eq(monitors.ownerHash, ownerHash))
     .orderBy(desc(monitors.createdAt));
+}
+
+export async function countMonitorsForOwner(ownerHash: string): Promise<number> {
+  const { db } = await getDb();
+  const [row] = await db
+    .select({ total: count() })
+    .from(monitors)
+    .where(eq(monitors.ownerHash, ownerHash));
+  return Number(row?.total ?? 0);
 }
 
 /** The monitor with this id, only if it belongs to the owner. */

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -13,6 +14,8 @@ interface Paywall3DProps {
   lockedSuggestionCount?: number;
   paymentsReady: boolean;
   devUnlock: boolean;
+  /** "$29.00/mo" when Pro can be bought; the cross-sell is hidden otherwise. */
+  proPrice?: string | null;
   className?: string;
 }
 
@@ -32,6 +35,7 @@ export function Paywall3D({
   lockedSuggestionCount = 0,
   paymentsReady,
   devUnlock,
+  proPrice = null,
   className,
 }: Paywall3DProps) {
   const router = useRouter();
@@ -184,7 +188,8 @@ export function Paywall3D({
               <p className="text-sm text-white/60">One-time payment</p>
               <p className="mt-1 text-4xl font-semibold tracking-tight">{price}</p>
               <p className="mt-1 text-xs text-white/50">
-                No subscription. Unlocks this report and future scans of this site.
+                No subscription. Unlocks this report (shareable by link) and your future scans of
+                this site.
               </p>
 
               <button
@@ -212,8 +217,19 @@ export function Paywall3D({
                   Checkout opens soon. Your free preview above stays available.
                 </p>
               ) : (
-                <p className="mt-3 text-xs text-white/50">Secure checkout by Stripe. Instant access.</p>
+                <p className="mt-3 text-xs text-white/50">
+                  Secure checkout by Stripe. Instant access. 14-day money-back guarantee.
+                </p>
               )}
+
+              {paymentsReady && proPrice ? (
+                <p className="mt-3 border-t border-white/10 pt-3 text-xs text-white/60">
+                  Fixing several sites?{" "}
+                  <Link href="/pricing" className="font-semibold text-white underline-offset-4 hover:underline">
+                    Pro unlocks every report — {proPrice}
+                  </Link>
+                </p>
+              ) : null}
 
               {error ? (
                 <p role="alert" className="mt-3 text-xs font-medium text-red-300">

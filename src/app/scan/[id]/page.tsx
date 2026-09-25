@@ -3,7 +3,14 @@ import { cookies } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { ScanView } from "@/components/ScanView";
-import { devUnlockEnabled, formatPrice, paymentsConfigured } from "@/lib/billing/pricing";
+import {
+  devUnlockEnabled,
+  formatPrice,
+  formatProPrice,
+  paymentsConfigured,
+  proConfigured,
+  proIntervalShort,
+} from "@/lib/billing/pricing";
 import { hostnameOf } from "@/lib/format";
 import { toScanDto } from "@/lib/scan/dto";
 import { loadScanHistory } from "@/lib/scan/history";
@@ -82,7 +89,7 @@ export default async function ScanPage({
     loadScanHistory(scan),
     // Only this browser's monitors count; other people's monitors stay private.
     owner ? getMonitorForOwnerByUrl(scan.normalizedUrl, owner.hash) : Promise.resolve(null),
-    isScanUnlocked(scan),
+    isScanUnlocked(scan, owner?.hash ?? null),
   ]);
 
   return (
@@ -95,6 +102,7 @@ export default async function ScanPage({
         price: formatPrice(),
         paymentsReady: paymentsConfigured(),
         devUnlock: devUnlockEnabled(),
+        proPrice: proConfigured() ? `${formatProPrice()}/${proIntervalShort()}` : null,
       }}
       returnedFromCheckout={unlockedParam === "1"}
     />

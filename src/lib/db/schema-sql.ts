@@ -117,4 +117,72 @@ ALTER TABLE notifications ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NU
 DROP INDEX IF EXISTS monitors_normalized_url_idx;
 CREATE UNIQUE INDEX IF NOT EXISTS monitors_owner_url_idx ON monitors (owner_hash, normalized_url);
 CREATE INDEX IF NOT EXISTS monitors_url_idx ON monitors (normalized_url);
+
+-- Unlocks for future scans of a site are tied to the buyer's browser identity.
+ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS buyer_hash text;
+ALTER TABLE entitlements ADD COLUMN IF NOT EXISTS buyer_email text;
+CREATE INDEX IF NOT EXISTS entitlements_url_buyer_idx ON entitlements (normalized_url, buyer_hash);
+
+CREATE TABLE IF NOT EXISTS report_leads (
+  id text PRIMARY KEY,
+  scan_id text NOT NULL REFERENCES scans(id) ON DELETE CASCADE,
+  email text NOT NULL,
+  owner_hash text,
+  marketing_consent boolean NOT NULL DEFAULT false,
+  unsubscribe_token text NOT NULL,
+  follow_ups_sent integer NOT NULL DEFAULT 0,
+  last_emailed_at timestamptz,
+  unsubscribed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS report_leads_scan_email_idx ON report_leads (scan_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS report_leads_unsubscribe_idx ON report_leads (unsubscribe_token);
+CREATE INDEX IF NOT EXISTS report_leads_email_idx ON report_leads (email);
+
+-- Accounts: passwordless magic-link sign-in and the Pro subscription.
+CREATE TABLE IF NOT EXISTS users (
+  id text PRIMARY KEY,
+  email text NOT NULL,
+  owner_id text,
+  owner_hash text,
+  stripe_customer_id text,
+  plan text NOT NULL DEFAULT 'free',
+  subscription_id text,
+  subscription_status text,
+  current_period_end timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS users_email_idx ON users (email);
+CREATE UNIQUE INDEX IF NOT EXISTS users_owner_hash_idx ON users (owner_hash);
+CREATE INDEX IF NOT EXISTS users_stripe_customer_idx ON users (stripe_customer_id);
+CREATE INDEX IF NOT EXISTS users_subscription_idx ON users (subscription_id);
+
+CREATE TABLE IF NOT EXISTS login_tokens (
+  id text PRIMARY KEY,
+  email text NOT NULL,
+  token_hash text NOT NULL,
+  requester_hash text,
+  expires_at timestamptz NOT NULL,
+  used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS login_tokens_token_hash_idx ON login_tokens (token_hash);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id text PRIMARY KEY,
+  user_id text NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash text NOT NULL,
+  expires_at timestamptz NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS sessions_token_hash_idx ON sessions (token_hash);
+CREATE INDEX IF NOT EXISTS sessions_user_id_idx ON sessions (user_id);
+
+-- Merging a browser identity into an account looks rows up by owner/buyer hash.
+CREATE INDEX IF NOT EXISTS entitlements_buyer_idx ON entitlements (buyer_hash);
+CREATE INDEX IF NOT EXISTS report_leads_owner_idx ON report_leads (owner_hash);
 `;

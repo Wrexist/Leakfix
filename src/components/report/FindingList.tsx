@@ -41,6 +41,7 @@ export function FindingList({
   price,
   paymentsReady,
   devUnlock,
+  proPrice = null,
 }: {
   findings: Finding[];
   locked?: boolean;
@@ -49,6 +50,7 @@ export function FindingList({
   price: string;
   paymentsReady: boolean;
   devUnlock: boolean;
+  proPrice?: string | null;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const lockedCount = findings.filter((finding) => finding.locked).length;
@@ -62,6 +64,7 @@ export function FindingList({
       lockedSuggestionCount={lockedSuggestionCount}
       paymentsReady={paymentsReady}
       devUnlock={devUnlock}
+      proPrice={proPrice}
     />
   ) : null;
 

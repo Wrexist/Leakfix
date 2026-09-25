@@ -49,6 +49,13 @@ slice: homepage → scan → persisted results → polished, tabbed report.
   monitoring, and alerts behind a one-time **3D paywall**. Entitlements are
   enforced server-side; Stripe Checkout and webhooks are wired (env-gated). See
   [docs/freemium.md](docs/freemium.md).
+- **Accounts (magic link) and Pro**: passwordless sign-in at `/login`, an
+  `/account` page with plan, billing, and unlocked reports, and a **Pro**
+  subscription (every report unlocked plus monitoring for up to
+  `LEAKFIX_PRO_MONITOR_LIMIT` sites) sold through Stripe Checkout and managed in
+  the Stripe Billing Portal. Signing in adopts or merges the browser's existing
+  purchases and monitors, so they follow the user across devices. See
+  [Accounts and Pro](docs/freemium.md#accounts-and-pro).
 - **Exports**: download the report as **CSV** (findings + suggestions, with fixes)
   or **Markdown**, or **Print / Save as PDF** from the browser. Endpoint:
   `GET /api/scans/[id]/export?format=csv|md`.
@@ -89,12 +96,11 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 
 ## What is intentionally not built yet
 
-Payments (Stripe Checkout), paid per-site entitlements, scheduled monitoring,
-alerts, and digests are built. These are not, and no fake buttons or placeholder
-features stand in for them:
+Payments (Stripe Checkout), paid per-site entitlements, accounts, the Pro
+subscription, scheduled monitoring, alerts, and digests are built. These are
+not, and no fake buttons or placeholder features stand in for them:
 
-- **User accounts** — unlocks and monitors are tied to the scanned URL, not a login.
-- **Subscription tiers** — the only paid product is the one-time per-site unlock.
+- **Teams** — an account is one person; there are no shared workspaces or seats.
 - **Agency / white-label** — branded PDF reports, multi-site plans, and an
   embeddable lead-gen audit widget (shown as "coming soon" on `/pricing`).
 - **Competitor scanning** — side-by-side audits of other sites.
@@ -144,12 +150,18 @@ Environment variables:
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `DATABASE_DIR` | in-memory | Directory for PGlite data. Set to a path (e.g. `./data/pglite`) to persist scans. `memory` is ephemeral. |
+| `DATABASE_URL` | unset | PostgreSQL connection string. **Required in production.** When set, it wins over `DATABASE_DIR`. See [Database](#database). |
+| `DATABASE_DIR` | in-memory | Directory for PGlite data when `DATABASE_URL` is unset. Set to a path (e.g. `./data/pglite`) to persist scans. `memory` is ephemeral. |
 | `LEAKFIX_ALLOW_PRIVATE_TARGETS` | `false` | Test-only. Allows loopback/private scan targets. Never enable in production. |
 | `NEXT_PUBLIC_SITE_URL` | `https://leakfix.example` | Public base URL. Single source of truth (`src/lib/site.ts`) for canonical URLs, Open Graph, JSON-LD, `robots.txt`, and the sitemap. |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | unset | Optional public contact address. When set, the footer shows a Contact link and the "Agency & teams" card on `/pricing` shows a "Tell me when it launches" mailto button. When unset, both are hidden. |
+| `LEAKFIX_POSTAL_ADDRESS` | unset | Postal address for follow-up emails to report leads (legally required for commercial email). Follow-ups from `/api/cron/follow-ups` are skipped until it is set. |
 | `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | unset | Optional. Loads cookie-free Plausible analytics and records the funnel events in `src/lib/analytics.ts`. |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | unset | Both required for real checkout. `STRIPE_PRICE_ID` is optional (defaults to `LEAKFIX_PRICE_CENTS`). See [docs/freemium.md](docs/freemium.md). |
+| `LEAKFIX_PRO_PRICE_CENTS` / `LEAKFIX_PRO_INTERVAL` | `2900` / `month` | Pro subscription price (in `LEAKFIX_PRICE_CURRENCY`) and interval (`month` or `year`). Pro is offered whenever Stripe is configured. |
+| `STRIPE_PRO_PRICE_ID` | unset | Optional recurring Stripe Price for Pro. Without it, Checkout charges `LEAKFIX_PRO_PRICE_CENTS` per interval. |
+| `LEAKFIX_PRO_MONITOR_LIMIT` | `10` | How many monitors a Pro subscriber can add for sites they haven't bought a report for. |
+| `EMAIL_API_KEY` / `EMAIL_FROM` | unset | Email provider (Resend by default). Also required for sign-in: magic links are emailed, and `/api/auth/request` returns 503 without it. |
 
 ## Development
 
@@ -161,14 +173,50 @@ Open http://localhost:3000.
 
 ## Database
 
-Development uses [PGlite](https://github.com/electric-sql/pglite), a WASM build of
-PostgreSQL that runs in-process. The schema lives in
-`src/lib/db/schema.ts` as plain Drizzle `pg-core`.
+The driver is chosen from the environment at first use
+(`src/lib/db/driver.ts`):
 
-For production, point the same schema at managed PostgreSQL by swapping the
-driver in `src/lib/db/client.ts` (for example `drizzle-orm/node-postgres`).
-Replace the idempotent `ensureSchema` bootstrapping in `src/lib/db/schema-sql.ts`
-with generated migrations (`drizzle-kit`) at that point.
+| Environment | Driver | Use for |
+| --- | --- | --- |
+| `DATABASE_URL` set | PostgreSQL via [postgres.js](https://github.com/porsager/postgres) (`drizzle-orm/postgres-js`) | Production, staging |
+| `DATABASE_DIR=<path>` | [PGlite](https://github.com/electric-sql/pglite) persisted to that directory | Local development |
+| neither, or `DATABASE_DIR=memory` | PGlite in memory | Tests, e2e, quick experiments |
+
+**Production must set `DATABASE_URL`.** An in-memory database loses every scan,
+monitor, and paid unlock on restart, and on serverless or multi-instance hosts
+each instance gets its own copy (the instance that receives the Stripe webhook
+grants an unlock the others never see). If a production process starts without
+`DATABASE_URL` or a persistent `DATABASE_DIR`, it logs
+`{"level":"error","event":"ephemeral_database_in_production"}` once. It does not
+crash, because `next build` also runs with `NODE_ENV=production`.
+
+Any PostgreSQL 13+ works. Recommended managed hosts:
+
+- **Neon** or **Supabase** for serverless deployments (Vercel, Netlify). Use the
+  pooled connection string (Neon `-pooler` host, Supabase port `6543`).
+- **AWS RDS / Aurora**, **Google Cloud SQL**, or any self-hosted Postgres,
+  ideally behind PgBouncer or RDS Proxy.
+
+```bash
+DATABASE_URL=postgres://user:password@host:5432/leakfix?sslmode=require
+```
+
+The pool is small (5 connections per instance) and prepared statements are off,
+so transaction-mode poolers work.
+
+**Schema migrations run on boot.** The first query in each process runs the
+idempotent DDL in `src/lib/db/schema-sql.ts` (`CREATE ... IF NOT EXISTS`,
+`ADD COLUMN IF NOT EXISTS`). On PostgreSQL it runs under an advisory lock and
+records a hash of that SQL in `leakfix_schema_version`, so instances that boot
+together do not race, and later cold starts skip the DDL until the SQL changes.
+The database user needs `CREATE` rights on the schema. The table definitions for
+queries live in `src/lib/db/schema.ts` (Drizzle `pg-core`); keep the two in sync.
+Moving to generated `drizzle-kit` migrations is a later step.
+
+To run the driver check against a real server, point
+`LEAKFIX_TEST_DATABASE_URL` at a **disposable** database (the test drops and
+recreates its `public` schema) and run
+`npx vitest run src/lib/db/postgres.live.test.ts`. It is skipped otherwise.
 
 ## Tests
 
@@ -234,6 +282,8 @@ src/
   app/                 routes (home, scan, API, error, not-found)
   components/          UI components
   lib/
+    auth/              accounts, magic-link sessions, identity merge, Pro checks
+    billing/           pricing, Stripe Checkout / Billing Portal, receipts
     db/                Drizzle schema + PGlite client
     scan/              the scan domain
       checks/          one module per audit rule + registry

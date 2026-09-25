@@ -9,7 +9,8 @@ export type FunnelEvent =
   | "report_viewed"
   | "paywall_viewed"
   | "checkout_started"
-  | "report_unlocked";
+  | "report_unlocked"
+  | "report_emailed";
 
 type Props = Record<string, string | number | boolean>;
 

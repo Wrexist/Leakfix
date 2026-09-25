@@ -2,6 +2,7 @@ import dns from "node:dns/promises";
 
 import type { ScanErrorCode } from "./errors";
 import { isBlockedAddress } from "./ip";
+import { BLOCKED_ADDRESS_CODE, withPinnedDispatcher } from "./pinned-dns";
 import { validateUrlInput } from "./url";
 
 export interface FetchSuccess {
@@ -60,6 +61,10 @@ export function classifyFetchError(error: unknown): { code: ScanErrorCode; detai
   ) {
     return { code: "TIMEOUT", detail: "request_timeout" };
   }
+  if (code === BLOCKED_ADDRESS_CODE) {
+    // The pinned connect-time lookup refused a private address (DNS rebinding).
+    return { code: "BLOCKED_TARGET", detail: "resolves_to_private" };
+  }
   if (code === "ENOTFOUND" || code === "EAI_AGAIN" || code === "UND_ERR_DNS_RESOLVE_FAILED") {
     return { code: "DNS_FAILURE", detail: `dns_${code}` };
   }
@@ -73,6 +78,12 @@ function mapUrlErrorCode(code: string): ScanErrorCode {
   return "INVALID_URL";
 }
 
+/**
+ * Early, friendly pre-check of a hostname's addresses. It is not the security
+ * boundary on its own (fetch would resolve again): every request also goes
+ * through `pinnedDispatcher`, which re-validates at connect time and pins the
+ * socket to the checked address.
+ */
 export async function resolveAndValidateHost(
   hostname: string,
   allowPrivate: boolean,
@@ -187,15 +198,22 @@ export async function safeFetch(
 
     let response: Response;
     try {
-      response = await fetch(validation.target.href, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(timeoutMs),
-        headers: {
-          "user-agent": userAgent,
-          accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.1",
-          "accept-language": "en-US,en;q=0.9",
-        },
-      });
+      // Pinned per hop: each redirect target is re-validated at connect time.
+      response = await fetch(
+        validation.target.href,
+        withPinnedDispatcher(
+          {
+            redirect: "manual",
+            signal: AbortSignal.timeout(timeoutMs),
+            headers: {
+              "user-agent": userAgent,
+              accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.1",
+              "accept-language": "en-US,en;q=0.9",
+            },
+          },
+          allowPrivate,
+        ),
+      );
     } catch (error) {
       return { ok: false, ...classifyFetchError(error) };
     }

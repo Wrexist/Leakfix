@@ -1,17 +1,26 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ProCta } from "@/components/account/ProCta";
 import { Reveal } from "@/components/motion/Reveal";
 import { JsonLd } from "@/components/seo/JsonLd";
-import { REPORT_PRICE, formatPrice } from "@/lib/billing/pricing";
+import {
+  PRO_PRICE,
+  REPORT_PRICE,
+  formatPrice,
+  formatProPrice,
+  proIntervalShort,
+} from "@/lib/billing/pricing";
 import { TOTAL_CHECKS } from "@/lib/scan/catalog";
 import { SITE_NAME, SITE_URL, absoluteUrl, contactEmail } from "@/lib/site";
 
 const PRICE = formatPrice();
+const PRO = `${formatProPrice()}/${proIntervalShort()}`;
+const PRO_PERIOD = PRO_PRICE.interval === "year" ? "year" : "month";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: `Scan any website or app listing free: score, every issue, and the top fix. Unlock every fix, copy-paste code, exports, and monitoring for one site for ${PRICE}, once. No subscription.`,
+  description: `Scan any website or app listing free: score, every issue, and the top fix. Unlock every fix, copy-paste code, exports, and monitoring for one site for ${PRICE}, once — or get every report unlocked with Pro for ${PRO}.`,
   alternates: { canonical: "/pricing" },
   openGraph: {
     title: `LeakFix pricing — free scan, ${PRICE} one-time per site`,
@@ -37,24 +46,41 @@ const FULL_FEATURES = [
   "Monitoring for that site: scheduled re-scans, score-drop alerts, and email digests",
 ];
 
+const PRO_FEATURES = [
+  "Every report you open fully unlocked, on any site",
+  "Every fix, code snippet, SEO suggestion, and export",
+  `Monitoring for up to ${PRO_PRICE.monitorLimit} sites`,
+  "Your unlocked reports on every device you sign in on",
+  "Cancel any time from your account",
+];
+
 const AGENCY_FEATURES = [
   "White-label PDF reports with your branding",
   "Multiple sites under one plan",
   "An embeddable audit widget to capture leads on your own site",
 ];
 
-const PRICING_FAQ = [
+const PRICING_FAQ: { q: string; a: string; link?: { href: string; label: string } }[] = [
   {
     q: "What is free?",
     a: `Running a scan. You get your score, every issue across ${TOTAL_CHECKS} checks with the evidence we found, and the complete fix for your highest-priority issue. No account and no card are needed.`,
   },
   {
     q: "Is this a subscription?",
-    a: `No. The full report is a one-time payment of ${PRICE} per site. There is nothing to cancel and no recurring charge.`,
+    a: `Only if you want one. The full report is a one-time payment of ${PRICE} per site, with nothing to cancel. Pro is ${formatProPrice()} per ${PRO_PERIOD} and unlocks every report you open, which suits people fixing several sites. Cancel Pro any time from the billing portal in your account; it stays active until the end of the period you paid for.`,
+  },
+  {
+    q: "Can I get a refund?",
+    a: "Yes. If LeakFix isn't useful, ask within 14 days of paying and we'll refund you in full.",
+    link: { href: "/refunds", label: "See our refund policy." },
   },
   {
     q: "What does “per site” mean?",
-    a: "The unlock is tied to the URL you scanned. Every future scan of that same URL — including scheduled monitoring re-scans — opens fully unlocked, so you can fix, re-scan, and confirm without paying again.",
+    a: "The unlock is tied to the URL you scanned. Every future scan of that same URL from your browser — including scheduled monitoring re-scans — opens fully unlocked, so you can fix, re-scan, and confirm without paying again. We also email you a link to the paid report.",
+  },
+  {
+    q: "Can I share the full report?",
+    a: "Yes. Anyone with the link to the report you paid for can see it in full — send it to your developer or agency. Re-scans stay tied to you.",
   },
   {
     q: "Does unlocking one page unlock my other pages?",
@@ -114,6 +140,28 @@ export default function PricingPage() {
     },
     {
       "@context": "https://schema.org",
+      "@type": "Product",
+      name: `${SITE_NAME} Pro`,
+      description: `A ${PRO_PERIOD}ly subscription: every LeakFix report unlocked for the subscriber, plus monitoring for up to ${PRO_PRICE.monitorLimit} sites.`,
+      brand: { "@type": "Brand", name: SITE_NAME },
+      url: absoluteUrl("/pricing"),
+      offers: {
+        "@type": "Offer",
+        price: (PRO_PRICE.amountCents / 100).toFixed(2),
+        priceCurrency: PRO_PRICE.currency.toUpperCase(),
+        priceSpecification: {
+          "@type": "UnitPriceSpecification",
+          price: (PRO_PRICE.amountCents / 100).toFixed(2),
+          priceCurrency: PRO_PRICE.currency.toUpperCase(),
+          unitCode: PRO_PRICE.interval === "year" ? "ANN" : "MON",
+        },
+        availability: "https://schema.org/InStock",
+        url: absoluteUrl("/pricing"),
+        seller: { "@id": `${SITE_URL}/#organization` },
+      },
+    },
+    {
+      "@context": "https://schema.org",
       "@type": "BreadcrumbList",
       itemListElement: [
         { "@type": "ListItem", position: 1, name: "Home", item: absoluteUrl("/") },
@@ -134,11 +182,11 @@ export default function PricingPage() {
           </h1>
           <p className="mt-4 text-lg leading-relaxed text-ink-soft">
             See every problem on your page for free. When you want every fix spelled out, unlock the
-            full report for that site with a single payment. No subscription.
+            full report for that site with a single payment. Fixing several sites? Pro unlocks them all.
           </p>
         </Reveal>
 
-        <div className="mt-12 grid gap-5 lg:grid-cols-3">
+        <div className="mt-12 grid gap-5 md:grid-cols-2 xl:grid-cols-4">
           <Reveal className="min-w-0">
             <div className="flex h-full flex-col rounded-3xl border border-line bg-white p-6 sm:p-8">
               <h2 className="text-lg font-semibold text-ink">Free scan</h2>
@@ -181,6 +229,24 @@ export default function PricingPage() {
                 <p className="mt-3 text-center text-xs text-ink-faint">
                   You unlock from your report, after you have seen the issues.
                 </p>
+                <p className="mt-1 text-center text-xs font-medium text-ink-soft">
+                  14-day money-back guarantee
+                </p>
+              </div>
+            </div>
+          </Reveal>
+
+          <Reveal delay={0.09} className="min-w-0">
+            <div className="flex h-full flex-col rounded-3xl border border-line bg-white p-6 sm:p-8">
+              <h2 className="text-lg font-semibold text-ink">Pro</h2>
+              <p className="mt-1 text-sm text-ink-faint">For fixing more than one site.</p>
+              <p className="mt-6 flex items-baseline gap-2">
+                <span className="text-4xl font-semibold tracking-tight text-ink">{formatProPrice()}</span>
+                <span className="text-sm text-ink-faint">per {PRO_PERIOD}</span>
+              </p>
+              <FeatureList items={PRO_FEATURES} />
+              <div className="mt-auto pt-8">
+                <ProCta />
               </div>
             </div>
           </Reveal>
@@ -234,7 +300,17 @@ export default function PricingPage() {
                     </svg>
                   </span>
                 </summary>
-                <p className="mt-3 max-w-2xl leading-relaxed text-ink-soft">{item.a}</p>
+                <p className="mt-3 max-w-2xl leading-relaxed text-ink-soft">
+                  {item.a}
+                  {item.link ? (
+                    <>
+                      {" "}
+                      <Link href={item.link.href} className="font-medium text-brand hover:text-brand-dark">
+                        {item.link.label}
+                      </Link>
+                    </>
+                  ) : null}
+                </p>
               </details>
             ))}
           </div>

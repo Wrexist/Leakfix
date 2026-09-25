@@ -26,11 +26,27 @@ to every address returned by DNS resolution:
 
 - DNS is resolved and re-validated on every redirect hop, with manual redirect
   handling (max 5 hops).
+- **DNS pinning (anti DNS rebinding).** Every request, on every redirect hop,
+  goes through an undici `Agent` whose `connect.lookup` is replaced
+  (`src/lib/scan/pinned-dns.ts`). At connect time it resolves the host once,
+  rejects the whole answer if any address is blocked by `ip.ts`, and hands the
+  socket exactly the addresses it validated. There is no second resolution
+  between check and connect, so a short-TTL record cannot pass the pre-check
+  with a public IP and then connect to `169.254.169.254` or `10.x`. A blocked
+  connect surfaces as `BLOCKED_TARGET`. Literal-IP hosts never reach `lookup`;
+  `validateUrlInput` rejects private ones first.
 - Request timeout via `AbortSignal.timeout`.
 - `Content-Type` must be HTML.
 - Response body is capped at 2 MB.
 - A descriptive `User-Agent` identifies the bot.
 - All failures map to stable, user-safe error codes.
+
+**Webhook delivery** (`src/lib/scan/webhook.ts`) applies the same policy: URL
+validation, https only, the DNS pre-check, and the pinned dispatcher. A
+connect-time block is reported as `blocked_BLOCKED_TARGET` and never retried.
+
+`LEAKFIX_ALLOW_PRIVATE_TARGETS=true` (tests and e2e only) skips the pre-check
+and uses the default dispatcher, so the local fixture server is reachable.
 
 **Output safety.** The UI renders findings as text through React. No
 `dangerouslySetInnerHTML`. Evidence is derived from parsed HTML, not injected
@@ -53,8 +69,6 @@ through React (no `dangerouslySetInnerHTML`).
 
 ## Deferred to the security phase
 
-- **DNS rebinding / TOCTOU.** DNS is checked before fetch, but the HTTP client
-  resolves again. Pinning the connection to the validated IP is not implemented.
 - **Egress allowlisting / proxy.** No network egress policy or isolation yet.
 - **Redirect to private IP via alternative encodings** beyond the WHATWG URL
   normalization already applied.
