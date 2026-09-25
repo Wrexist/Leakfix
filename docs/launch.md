@@ -101,7 +101,9 @@ Optional pricing: `LEAKFIX_PRICE_CENTS` (default 1900), `LEAKFIX_PRO_PRICE_CENTS
 | `/api/cron/digest` | 07:00 | Daily/weekly digest emails |
 | `/api/cron/follow-ups` | 15:00 | Day-2/day-6 follow-ups to consenting leads |
 
-Hobby allows daily jobs, which is all these need. If `/api/cron/rescan` reports
+Hobby allows up to 100 jobs per project if each runs at most once a day, which
+is all these need. Hobby jobs start within their scheduled hour (±59 min), not
+on the minute. If `/api/cron/rescan` reports
 `remaining > 0`, you have more monitored sites than one run can scan. Upgrade to
 Pro and run it more often.
 
