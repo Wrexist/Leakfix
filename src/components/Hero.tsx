@@ -3,6 +3,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useState } from "react";
 
+import { DEMO_MODE } from "@/lib/demo";
 import { SCAN_KINDS, SCAN_KIND_EXAMPLE, SCAN_KIND_LABEL, type ScanKind } from "@/lib/scan/types";
 
 import { ScanForm } from "./ScanForm";
@@ -120,6 +121,9 @@ export function Hero({ checksCount }: { checksCount: number }) {
 
           <div className="text-left">
             <ScanForm
+              // The demo prefills a sample for the chosen target; remount to switch it.
+              key={DEMO_MODE ? kind : undefined}
+              kind={kind}
               placeholder={SCAN_KIND_EXAMPLE[kind]}
               example={SCAN_KIND_EXAMPLE[kind]}
             />

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
-import { hostnameOf } from "@/lib/format";
-import { toScanDto, type ScanDto } from "@/lib/scan/dto";
-import { buildCsv, buildMarkdown } from "@/lib/scan/export";
+import { toScanDto } from "@/lib/scan/dto";
+import { buildCsv, buildMarkdown, exportFileName } from "@/lib/scan/export";
 import {
   getFindingsForScan,
   getScanById,
@@ -14,11 +13,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function safeSlug(scan: ScanDto): string {
-  const host = hostnameOf(scan.finalUrl ?? scan.normalizedUrl).replace(/[^a-z0-9.-]/gi, "-");
-  return `leakfix-${host || "report"}-${scan.id.slice(0, 8)}`;
-}
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -47,7 +41,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return new Response(buildMarkdown(dto), {
       headers: {
         "content-type": "text/markdown; charset=utf-8",
-        "content-disposition": `attachment; filename="${safeSlug(dto)}.md"`,
+        "content-disposition": `attachment; filename="${exportFileName(dto, "md")}"`,
       },
     });
   }
@@ -55,7 +49,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return new Response(buildCsv(dto), {
     headers: {
       "content-type": "text/csv; charset=utf-8",
-      "content-disposition": `attachment; filename="${safeSlug(dto)}.csv"`,
+      "content-disposition": `attachment; filename="${exportFileName(dto, "csv")}"`,
     },
   });
 }

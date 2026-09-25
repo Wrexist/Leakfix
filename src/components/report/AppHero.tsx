@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 
+import { DEMO_MODE } from "@/lib/demo";
 import { formatDuration } from "@/lib/format";
 import { hasLockedContent, type ScanDto } from "@/lib/scan/dto";
 import { scoreSummary } from "@/lib/scan/score";
@@ -35,6 +36,7 @@ export function AppHero({ scan, score }: { scan: ScanDto; score: number }) {
         transition={{ duration: 0.5, ease: EASE }}
       >
         <p className="text-sm font-semibold tracking-wide text-brand">
+          {DEMO_MODE ? "Sample " : null}
           {SCAN_KIND_LABEL[scan.kind]} listing report
         </p>
 
@@ -54,14 +56,19 @@ export function AppHero({ scan, score }: { scan: ScanDto; score: number }) {
             </h1>
             <p className="mt-1 break-words text-ink-soft">
               {subject?.developer ? `${subject.developer} · ` : null}
-              <a
-                href={storeUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink"
-              >
-                View on store
-              </a>
+              {/* Demo listings are fictional, so there is no store page to open. */}
+              {DEMO_MODE ? (
+                <span className="font-medium text-ink">Fictional listing</span>
+              ) : (
+                <a
+                  href={storeUrl}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink"
+                >
+                  View on store
+                </a>
+              )}
               {duration ? ` · analyzed in ${duration}` : null}
             </p>
           </div>

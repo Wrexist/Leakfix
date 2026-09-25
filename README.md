@@ -25,6 +25,34 @@ scheduled jobs, Neon for a free Postgres database, Stripe, and Resend. It takes
 about an hour. `GET /api/health` (with the cron secret) reports whether every
 required setting is in place.
 
+## Demo on GitHub Pages
+
+A static, click-through demo is published to https://wrexist.github.io/Leakfix/
+by [.github/workflows/pages.yml](.github/workflows/pages.yml) on every push to
+`main`. It is this same app built with `npm run build:pages`
+(`NEXT_PUBLIC_DEMO_MODE=true`): a static export with no server, database,
+accounts, or payments.
+
+- "Scans" play the scanning screen, then open reports for four fictional sample
+  targets: two websites, an iPhone app, and an Android app. The real scan engine
+  produces those reports at build time from
+  [src/lib/demo/fixtures.ts](src/lib/demo/fixtures.ts).
+- Unlocking is free, exports are generated in the browser, and monitoring,
+  email, sign-in, and checkout are hidden. Every page is `noindex`.
+- Only `*.demo.tsx` / `*.demo.ts` route files are part of the demo build (see
+  `next.config.ts`). To include a page, add a `page.demo.tsx` next to it.
+
+Preview it locally:
+
+```bash
+npm run build:pages
+npm run preview:pages   # http://localhost:4173/
+```
+
+One-time setup: in the repository settings, set **Pages → Source** to
+**GitHub Actions**. Optionally set the repository variable `DEMO_LIVE_APP_URL`
+to add an "Open the live app" link to the demo banner.
+
 ## What is real in this phase
 
 - A **real scan pipeline**: safe fetch → HTML extraction → modular checks →
@@ -292,6 +320,7 @@ src/
     auth/              accounts, magic-link sessions, identity merge, Pro checks
     billing/           pricing, Stripe Checkout / Billing Portal, receipts
     db/                Drizzle schema + PGlite client
+    demo/              sample targets and reports for the GitHub Pages demo
     scan/              the scan domain
       checks/          one module per audit rule + registry
       url.ts ip.ts     validation + SSRF classification (pure)

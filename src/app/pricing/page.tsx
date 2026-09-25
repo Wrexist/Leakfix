@@ -11,6 +11,7 @@ import {
   formatProPrice,
   proIntervalShort,
 } from "@/lib/billing/pricing";
+import { DEMO_MODE } from "@/lib/demo";
 import { TOTAL_CHECKS } from "@/lib/scan/catalog";
 import {
   SITE_NAME,
@@ -258,7 +259,13 @@ export default function PricingPage() {
               </p>
               <FeatureList items={PRO_FEATURES} />
               <div className="mt-auto pt-8">
-                <ProCta />
+                {DEMO_MODE ? (
+                  <p className="text-center text-sm font-medium text-ink-faint">
+                    Checkout is off in this demo
+                  </p>
+                ) : (
+                  <ProCta />
+                )}
               </div>
             </div>
           </Reveal>

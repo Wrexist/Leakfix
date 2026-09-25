@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DEMO_MODE } from "@/lib/demo";
 import { contactEmail } from "@/lib/site";
 
 import { Logo } from "./Logo";
@@ -7,7 +8,8 @@ import { Logo } from "./Logo";
 const LINKS = [
   { href: "/pricing", label: "Pricing" },
   { href: "/checks", label: "What we check" },
-  { href: "/monitors", label: "Monitors" },
+  // Monitoring needs the server, so the static demo has no Monitors page.
+  ...(DEMO_MODE ? [] : [{ href: "/monitors", label: "Monitors" }]),
   { href: "/#faq", label: "FAQ" },
 ];
 

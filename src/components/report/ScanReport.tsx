@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { BillingInfo } from "@/lib/billing/pricing";
+import { DEMO_MODE } from "@/lib/demo";
 import { hostnameOf } from "@/lib/format";
 import type { ScanDto } from "@/lib/scan/dto";
 import type { ScanHistoryData } from "@/lib/scan/history";
@@ -43,11 +44,14 @@ export function ScanReport({
       <ReportHero scan={scan} host={host} analyzedUrl={analyzedUrl} score={score} />
       <ExecutiveSummary scan={scan} />
       <ScanHistory history={history} currentId={scan.id} />
-      <MonitorPanel
-        url={scan.normalizedUrl}
-        initiallyMonitored={monitored}
-        locked={!scan.unlocked}
-      />
+      {/* Monitoring and email need the server, so the static demo leaves them out. */}
+      {DEMO_MODE ? null : (
+        <MonitorPanel
+          url={scan.normalizedUrl}
+          initiallyMonitored={monitored}
+          locked={!scan.unlocked}
+        />
+      )}
       <ActionPlan findings={scan.findings} />
       <FindingList
         findings={scan.findings}
@@ -65,7 +69,7 @@ export function ScanReport({
         locked={!scan.unlocked}
         lockedCount={scan.lockedSuggestionCount}
       />
-      <EmailReport scanId={scan.id} locked={!scan.unlocked} />
+      {DEMO_MODE ? null : <EmailReport scanId={scan.id} locked={!scan.unlocked} />}
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

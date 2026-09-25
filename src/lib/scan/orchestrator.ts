@@ -2,7 +2,6 @@ import { logEvent } from "@/lib/logger";
 
 import { APP_CHECKS, runAppAudit } from "./app/checks";
 import { collectAndroidApp, collectIosApp } from "./app/collect";
-import type { AppSnapshot } from "./app/types";
 import { AUDIT_CHECKS } from "./checks";
 import { extractPage, type RobotsTxtInfo } from "./extract";
 import { safeFetch } from "./fetcher";
@@ -14,8 +13,9 @@ import { scoreFindings } from "./score";
 import { userFacingScanError, type ScanErrorCode } from "./errors";
 import * as repository from "./repository";
 import { assertTransition, isScanStatus, type ScanStatus } from "./state";
+import { appSubject, websiteSubject } from "./subject";
 import { detectScanKind, parseAppTarget } from "./target";
-import { isScanKind, type ScanKind, type ScanSubject } from "./types";
+import { isScanKind, type ScanKind } from "./types";
 import { validateUrlInput } from "./url";
 
 export interface CreateScanSuccess {
@@ -105,36 +105,6 @@ async function fetchRobotsTxt(finalUrl: string, allowPrivate: boolean): Promise<
     return { fetched: true, status: outcome.statusCode ?? null, hasSitemap: false, disallowAll: false };
   }
   return empty;
-}
-
-function websiteSubject(snapshot: {
-  finalUrl: string;
-  title: string | null;
-  favicon: string | null;
-}): ScanSubject {
-  return {
-    kind: "website",
-    name: snapshot.title,
-    icon: snapshot.favicon,
-    developer: null,
-    storeUrl: snapshot.finalUrl,
-    rating: null,
-    ratingCount: null,
-    installs: null,
-  };
-}
-
-function appSubject(app: AppSnapshot): ScanSubject {
-  return {
-    kind: app.kind,
-    name: app.name,
-    icon: app.icon,
-    developer: app.developer,
-    storeUrl: app.storeUrl,
-    rating: app.rating,
-    ratingCount: app.ratingCount,
-    installs: app.installs,
-  };
 }
 
 async function failScan(

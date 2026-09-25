@@ -30,6 +30,12 @@ function csvRow(values: (string | null | undefined)[]): string {
   return values.map(csvCell).join(",");
 }
 
+/** Download name for an export, e.g. `leakfix-example.com-1a2b3c4d.csv`. */
+export function exportFileName(scan: ScanDto, extension: "csv" | "md"): string {
+  const host = hostnameOf(scan.finalUrl ?? scan.normalizedUrl).replace(/[^a-z0-9.-]/gi, "-");
+  return `leakfix-${host || "report"}-${scan.id.slice(0, 8)}.${extension}`;
+}
+
 /** Builds a spreadsheet-friendly CSV of findings and suggestions. */
 export function buildCsv(scan: ScanDto): string {
   const lines: string[] = [CSV_HEADER];
