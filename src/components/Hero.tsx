@@ -19,7 +19,7 @@ const item = {
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
 };
 
-const RISK_FACTS = ["Free, no account", "Read-only scan", "Results in seconds"];
+const RISK_FACTS = ["Free scan, no account", "Read-only", "Results in seconds"];
 
 function AnimatedBackdrop() {
   const reduce = useReducedMotion();
@@ -83,8 +83,8 @@ export function Hero({ checksCount }: { checksCount: number }) {
           variants={item}
           className="mx-auto mt-5 max-w-2xl text-lg leading-relaxed text-ink-soft sm:text-xl"
         >
-          Find the problems costing you conversions — and see exactly how to fix them. It takes
-          seconds, and it is free.
+          Find the problems costing you conversions — and see exactly how to fix them. The scan
+          takes seconds and is free.
         </motion.p>
 
         <motion.div variants={item} className="mx-auto mt-9 max-w-xl">

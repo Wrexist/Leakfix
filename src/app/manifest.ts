@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "LeakFix — Website conversion audit",
     short_name: "LeakFix",
     description:
-      "Find the problems costing you conversions and see exactly how to fix them. Free, read-only, no account.",
+      "Find the problems costing you conversions and see exactly how to fix them. Free scan, read-only, no account.",
     start_url: "/",
     display: "standalone",
     background_color: "#ffffff",

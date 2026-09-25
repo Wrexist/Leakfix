@@ -41,6 +41,7 @@ export function isBlockedIpv4(ip: string): boolean {
   if (a === 172 && b >= 16 && b <= 31) return true; // private
   if (a === 192 && b === 0 && c === 0) return true; // IETF protocol assignments
   if (a === 192 && b === 0 && c === 2) return true; // TEST-NET-1
+  if (a === 192 && b === 88 && c === 99) return true; // 6to4 relay anycast
   if (a === 192 && b === 168) return true; // private
   if (a === 198 && (b === 18 || b === 19)) return true; // benchmarking
   if (a === 198 && b === 51 && c === 100) return true; // TEST-NET-2
@@ -49,28 +50,77 @@ export function isBlockedIpv4(ip: string): boolean {
   return false;
 }
 
-export function isBlockedIpv6(ip: string): boolean {
-  const address = ip.toLowerCase().split("%")[0].trim();
-  if (address === "" || address === "::" || address === "::1") return true;
+/**
+ * Parses an IPv6 address into its eight 16-bit groups, expanding `::` and a
+ * trailing dotted IPv4 part. Returns null for anything malformed.
+ */
+function parseIpv6(value: string): number[] | null {
+  let address = value.toLowerCase().split("%")[0].trim();
+  if (address.startsWith("[") && address.endsWith("]")) address = address.slice(1, -1);
+  if (address === "" || !/^[0-9a-f:.]+$/.test(address)) return null;
 
-  const mapped = address.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
-  if (mapped) return isBlockedIpv4(mapped[1]);
-
-  // ::ffff:xxxx:xxxx hex-encoded IPv4-mapped address.
-  const hexMapped = address.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
-  if (hexMapped) {
-    const high = parseInt(hexMapped[1], 16);
-    const low = parseInt(hexMapped[2], 16);
-    const dotted = `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
-    return isBlockedIpv4(dotted);
+  // A trailing dotted IPv4 part (for example ::ffff:127.0.0.1) fills two groups.
+  let tail: number[] = [];
+  const lastColon = address.lastIndexOf(":");
+  if (address.slice(lastColon + 1).includes(".")) {
+    const ipv4 = parseIpv4(address.slice(lastColon + 1));
+    if (!ipv4 || lastColon < 0) return null;
+    tail = [(ipv4[0] << 8) | ipv4[1], (ipv4[2] << 8) | ipv4[3]];
+    address = address.slice(0, lastColon + 1);
+    // Keep a "::" intact; otherwise drop the separator before the IPv4 part.
+    if (!address.endsWith("::")) address = address.slice(0, -1);
   }
 
-  if (address.startsWith("fc") || address.startsWith("fd")) return true; // unique local
-  if (/^fe[89ab]/.test(address)) return true; // link-local
-  if (address.startsWith("ff")) return true; // multicast
-  if (address.startsWith("2001:db8")) return true; // documentation
-  if (address.startsWith("64:ff9b::")) return true; // NAT64
-  if (address.startsWith("2002::")) return true; // 6to4 (can tunnel IPv4)
+  const halves = address.split("::");
+  if (halves.length > 2) return null;
+
+  const parseGroups = (part: string): number[] | null => {
+    if (part === "") return [];
+    const groups: number[] = [];
+    for (const group of part.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/.test(group)) return null;
+      groups.push(parseInt(group, 16));
+    }
+    return groups;
+  };
+
+  const head = parseGroups(halves[0]);
+  const rest = halves.length === 2 ? parseGroups(halves[1]) : [];
+  if (!head || !rest) return null;
+
+  const explicit = head.length + rest.length + tail.length;
+  if (halves.length === 1) {
+    return explicit === 8 ? [...head, ...tail] : null;
+  }
+  if (explicit > 7) return null;
+  return [...head, ...new Array<number>(8 - explicit).fill(0), ...rest, ...tail];
+}
+
+function embeddedIpv4(high: number, low: number): string {
+  return `${(high >> 8) & 0xff}.${high & 0xff}.${(low >> 8) & 0xff}.${low & 0xff}`;
+}
+
+export function isBlockedIpv6(ip: string): boolean {
+  const groups = parseIpv6(ip);
+  if (!groups) return true;
+  const [g0, g1, g2, g3, g4, g5, g6, g7] = groups;
+  const zeroPrefix = (count: number) => groups.slice(0, count).every((group) => group === 0);
+
+  // ::ffff:a.b.c.d IPv4-mapped: judge the embedded IPv4 address.
+  if (zeroPrefix(5) && g5 === 0xffff) return isBlockedIpv4(embeddedIpv4(g6, g7));
+  // ::/96 covers ::, ::1 and deprecated IPv4-compatible (::a.b.c.d) addresses.
+  if (zeroPrefix(6)) return true;
+  // ::ffff:0:a.b.c.d IPv4-translated (SIIT).
+  if (zeroPrefix(4) && g4 === 0xffff && g5 === 0) return true;
+  if (g0 === 0x0064 && g1 === 0xff9b) return true; // NAT64 64:ff9b::/96 and 64:ff9b:1::/48
+  if (g0 === 0x0100 && g1 === 0 && g2 === 0 && g3 === 0) return true; // discard-only 100::/64
+  if (g0 === 0x2001 && g1 < 0x0200) return true; // IETF special-purpose 2001::/23 (incl. Teredo)
+  if (g0 === 0x2001 && g1 === 0x0db8) return true; // documentation
+  if (g0 === 0x2002) return true; // 6to4 2002::/16 (tunnels IPv4)
+  if (g0 === 0x3fff && g1 < 0x1000) return true; // documentation 3fff::/20
+  if ((g0 & 0xfe00) === 0xfc00) return true; // unique local fc00::/7
+  if ((g0 & 0xff80) === 0xfe80) return true; // link-local fe80::/10 + site-local fec0::/10
+  if ((g0 & 0xff00) === 0xff00) return true; // multicast
   return false;
 }
 

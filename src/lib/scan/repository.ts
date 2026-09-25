@@ -117,6 +117,43 @@ export async function hasEntitlementForUrl(normalizedUrl: string): Promise<boole
   return rows.length > 0;
 }
 
+/** Hostname without a leading "www.", so www/apex variants of a site match. */
+function siteHost(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when an earlier paid scan of the same URL landed on the same site as this
+ * scan. Comparing the fetched host (not only the typed URL) stops a paid URL
+ * from being redirected at another site to unlock its report for free.
+ */
+export async function hasEntitlementForSite(
+  scan: Pick<ScanRow, "normalizedUrl" | "finalUrl">,
+): Promise<boolean> {
+  const host = siteHost(scan.finalUrl ?? scan.normalizedUrl);
+  if (!host) return false;
+
+  const { db } = await getDb();
+  const rows = await db
+    .select({ normalizedUrl: scans.normalizedUrl, finalUrl: scans.finalUrl })
+    .from(entitlements)
+    .innerJoin(scans, eq(entitlements.scanId, scans.id))
+    .where(eq(entitlements.normalizedUrl, scan.normalizedUrl))
+    .limit(50);
+
+  return rows.some((paid) => siteHost(paid.finalUrl ?? paid.normalizedUrl) === host);
+}
+
+/** Whether the full report for this scan is unlocked (paid scan, or same site). */
+export async function isScanUnlocked(scan: ScanRow): Promise<boolean> {
+  return (await hasEntitlement(scan.id)) || (await hasEntitlementForSite(scan));
+}
+
 /** Grants an unlock for a scan. Idempotent: one entitlement per scan. */
 export async function grantEntitlement(input: {
   scanId: string;

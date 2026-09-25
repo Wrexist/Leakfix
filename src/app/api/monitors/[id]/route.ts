@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import {
+  getMonitorForOwner,
+  limitMonitorAction,
+  monitorNotFound,
+  ownerFromRequest,
+} from "@/lib/scan/monitor-owner";
 import { toMonitorDto } from "@/lib/scan/monitors";
 import { allowPrivateTargets, createScan, runScan } from "@/lib/scan/orchestrator";
 import {
   deleteMonitor,
-  getMonitorById,
   getScanById,
   updateMonitor,
   type UpdateMonitorPatch,
@@ -29,29 +34,29 @@ export const dynamic = "force-dynamic";
 
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+/** Loads the monitor only when it belongs to the requesting browser. */
+async function loadOwned(request: Request, id: string) {
+  const owner = ownerFromRequest(request);
+  if (!owner || !ID_PATTERN.test(id)) return { owner, monitor: null };
+  return { owner, monitor: await getMonitorForOwner(id, owner.hash) };
+}
+
+export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!ID_PATTERN.test(id)) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
-  const monitor = await getMonitorById(id);
-  if (!monitor) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
-  await deleteMonitor(id);
+  const { monitor } = await loadOwned(request, id);
+  if (!monitor) return monitorNotFound();
+  await deleteMonitor(monitor.id);
   return new NextResponse(null, { status: 204 });
 }
 
 /** Updates notification settings (and label/active) for a monitor. */
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!ID_PATTERN.test(id)) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
-  const monitor = await getMonitorById(id);
-  if (!monitor) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
+  const { owner, monitor } = await loadOwned(request, id);
+  if (!owner || !monitor) return monitorNotFound();
+
+  const limited = limitMonitorAction(request, owner, "update", 30);
+  if (limited) return limited;
 
   let body: unknown;
   try {
@@ -124,21 +129,19 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (data.active !== undefined) patch.active = data.active;
   if (data.label !== undefined) patch.label = data.label;
 
-  await updateMonitor(id, patch);
-  const updated = await getMonitorById(id);
+  await updateMonitor(monitor.id, patch);
+  const updated = await getMonitorForOwner(monitor.id, owner.hash);
   return NextResponse.json({ monitor: updated ? toMonitorDto(updated) : null });
 }
 
 /** Runs an immediate re-scan for this monitor and returns the new scan id. */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!ID_PATTERN.test(id)) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
-  const monitor = await getMonitorById(id);
-  if (!monitor) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
+  const { owner, monitor } = await loadOwned(request, id);
+  if (!owner || !monitor) return monitorNotFound();
+
+  const limited = limitMonitorAction(request, owner, "scan", 10);
+  if (limited) return limited;
 
   const created = await createScan(monitor.normalizedUrl);
   if (!created.ok) {
@@ -157,7 +160,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     scanCount: monitor.scanCount + 1,
   });
 
-  const updated = await getMonitorById(monitor.id);
+  const updated = await getMonitorForOwner(monitor.id, owner.hash);
   return NextResponse.json({
     scanId: created.id,
     monitor: updated ? toMonitorDto(updated) : null,

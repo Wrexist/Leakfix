@@ -4,7 +4,7 @@ const ROWS = [
   { label: "Where the problems are", old: "Guessing from gut feel", next: "Measured on your actual page" },
   { label: "What to fix first", old: "Everything feels urgent", next: "A ranked action plan" },
   { label: "What the fix is", old: "Vague advice from a blog", next: "Steps and copy-paste snippets" },
-  { label: "Time to the first answer", old: "Days of audits and meetings", next: "Seconds, free, no signup" },
+  { label: "Time to the first answer", old: "Days of audits and meetings", next: "Seconds — the scan is free" },
 ];
 
 export function Comparison() {

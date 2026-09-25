@@ -58,6 +58,8 @@ export const monitors = pgTable(
     id: text("id")
       .primaryKey()
       .$defaultFn(() => crypto.randomUUID()),
+    /** SHA-256 of the owning browser's `lf_owner` cookie; NULL for legacy rows. */
+    ownerHash: text("owner_hash"),
     normalizedUrl: text("normalized_url").notNull(),
     kind: text("kind").notNull().default("website"),
     label: text("label"),
@@ -78,7 +80,10 @@ export const monitors = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("monitors_normalized_url_idx").on(table.normalizedUrl)],
+  (table) => [
+    uniqueIndex("monitors_owner_url_idx").on(table.ownerHash, table.normalizedUrl),
+    index("monitors_url_idx").on(table.normalizedUrl),
+  ],
 );
 
 export const notifications = pgTable(

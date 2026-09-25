@@ -48,3 +48,16 @@ export function checkRateLimit(
 export function resetRateLimits(): void {
   buckets.clear();
 }
+
+/**
+ * Best-effort client IP for rate-limit keys. Prefers `x-real-ip`, then the
+ * first `x-forwarded-for` entry. Both are client-controlled unless the reverse
+ * proxy in front of the app overwrites them — make sure it does, or these keys
+ * can be spoofed to dodge per-IP limits.
+ */
+export function clientIp(request: Request): string {
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) return realIp;
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || "unknown";
+}

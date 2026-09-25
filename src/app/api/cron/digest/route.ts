@@ -2,17 +2,10 @@ import { NextResponse } from "next/server";
 
 import { runDigests } from "@/lib/scan/digest";
 
+import { isCronAuthorized } from "../auth";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-function isAuthorized(request: Request): boolean {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const header = request.headers.get("authorization") ?? "";
-  const bearer = header.replace(/^Bearer\s+/i, "").trim();
-  const direct = (request.headers.get("x-cron-secret") ?? "").trim();
-  return bearer === secret || direct === secret;
-}
 
 /**
  * Sends scheduled digest emails for every monitor that is due. Run this on the
@@ -26,7 +19,7 @@ async function handle(request: Request): Promise<Response> {
       { status: 503 },
     );
   }
-  if (!isAuthorized(request)) {
+  if (!isCronAuthorized(request)) {
     return NextResponse.json(
       { error: { code: "UNAUTHORIZED", message: "Invalid cron secret." } },
       { status: 401 },

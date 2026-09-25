@@ -36,6 +36,7 @@ interface FilterOption {
 export function FindingList({
   findings,
   locked = false,
+  lockedSuggestionCount = 0,
   scanId,
   price,
   paymentsReady,
@@ -43,6 +44,7 @@ export function FindingList({
 }: {
   findings: Finding[];
   locked?: boolean;
+  lockedSuggestionCount?: number;
   scanId: string;
   price: string;
   paymentsReady: boolean;
@@ -50,6 +52,18 @@ export function FindingList({
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const lockedCount = findings.filter((finding) => finding.locked).length;
+  // Never ask for money when there is nothing left to unlock.
+  const showPaywall = locked && (lockedCount > 0 || lockedSuggestionCount > 0);
+  const paywall = showPaywall ? (
+    <Paywall3D
+      scanId={scanId}
+      price={price}
+      lockedCount={lockedCount}
+      lockedSuggestionCount={lockedSuggestionCount}
+      paymentsReady={paymentsReady}
+      devUnlock={devUnlock}
+    />
+  ) : null;
 
   const priorityGroups = useMemo(() => groupByPriority(findings), [findings]);
 
@@ -109,6 +123,7 @@ export function FindingList({
             planned.
           </p>
         </div>
+        {paywall ? <div className="mt-6">{paywall}</div> : null}
       </section>
     );
   }
@@ -174,16 +189,8 @@ export function FindingList({
                       finding={finding}
                       defaultOpen={group.key === "fix-first" && index === 0}
                     />
-                    {locked && groupIndex === 0 && index === 0 ? (
-                      <li className="list-none">
-                        <Paywall3D
-                          scanId={scanId}
-                          price={price}
-                          lockedCount={lockedCount}
-                          paymentsReady={paymentsReady}
-                          devUnlock={devUnlock}
-                        />
-                      </li>
+                    {paywall && groupIndex === 0 && index === 0 ? (
+                      <li className="list-none">{paywall}</li>
                     ) : null}
                   </Fragment>
                 ))}

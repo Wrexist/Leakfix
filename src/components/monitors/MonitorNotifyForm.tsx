@@ -22,7 +22,8 @@ interface MonitorNotifyFormProps {
   policy: NotifyPolicy;
   digestFrequency: string;
   digestRecipients: string[];
-  webhookSecret: string | null;
+  /** The secret itself is never sent to the page; rotating reveals a new one once. */
+  hasWebhookSecret: boolean;
   emailEnabled: boolean;
 }
 
@@ -38,7 +39,7 @@ export function MonitorNotifyForm({
   policy,
   digestFrequency,
   digestRecipients,
-  webhookSecret,
+  hasWebhookSecret,
   emailEnabled,
 }: MonitorNotifyFormProps) {
   const [webhook, setWebhook] = useState(webhookUrl ?? "");
@@ -48,7 +49,7 @@ export function MonitorNotifyForm({
     isDigestFrequency(digestFrequency) ? digestFrequency : "off",
   );
   const [recipients, setRecipients] = useState(digestRecipients.join(", "));
-  const [secret, setSecret] = useState(webhookSecret);
+  const [secret, setSecret] = useState<string | null>(null);
   const [busy, setBusy] = useState<"save" | "test" | "digest" | "rotate" | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
 
@@ -255,7 +256,11 @@ export function MonitorNotifyForm({
         <span className="text-sm font-medium text-ink">Webhook signing secret</span>
         <div className="mt-1 flex flex-wrap items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-lg border border-line bg-canvas px-3 py-2 font-mono text-xs text-ink-soft">
-            {secret ? maskSecret(secret) : "Save a webhook URL to generate a secret"}
+            {secret
+              ? maskSecret(secret)
+              : hasWebhookSecret
+                ? "Hidden for security — rotate to generate a new secret you can copy"
+                : "Save a webhook URL to generate a secret"}
           </code>
           {secret ? <CopyButton value={secret} label="Copy" /> : null}
           <button

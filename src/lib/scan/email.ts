@@ -4,6 +4,20 @@ export interface EmailOutcome {
   detail: string;
 }
 
+/**
+ * Escapes text for interpolation into HTML (element content or quoted
+ * attributes). Every user- or page-derived value in an email/HTML template —
+ * monitor labels, URLs, finding titles — must pass through this.
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export interface EmailMessage {
   to: string | string[];
   subject: string;

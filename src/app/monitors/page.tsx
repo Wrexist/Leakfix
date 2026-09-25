@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 import { MonitorForm } from "@/components/monitors/MonitorForm";
@@ -7,14 +8,11 @@ import { MonitorRowActions } from "@/components/monitors/MonitorRowActions";
 import { NotificationRetry } from "@/components/monitors/NotificationRetry";
 import { ScoreTrend, type TrendPoint } from "@/components/report/ScoreTrend";
 import { emailConfigured } from "@/lib/scan/email";
+import { OWNER_COOKIE, listMonitorsForOwner, ownerFromCookieValue } from "@/lib/scan/monitor-owner";
 import { monitorLabel, toMonitorDto } from "@/lib/scan/monitors";
 import { isDigestFrequency } from "@/lib/scan/digest-policy";
 import { isNotifyPolicy } from "@/lib/scan/notify-policy";
-import {
-  getNotificationsForMonitor,
-  getScansForUrl,
-  listMonitors,
-} from "@/lib/scan/repository";
+import { getNotificationsForMonitor, getScansForUrl } from "@/lib/scan/repository";
 import { SCAN_KIND_LABEL } from "@/lib/scan/types";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +32,9 @@ function formatDate(iso: string | null): string {
 }
 
 export default async function MonitorsPage() {
-  const rows = await listMonitors();
+  // Monitors belong to the browser that created them (httpOnly owner cookie).
+  const owner = ownerFromCookieValue((await cookies()).get(OWNER_COOKIE)?.value);
+  const rows = owner ? await listMonitorsForOwner(owner.hash) : [];
   const emailEnabled = emailConfigured();
 
   const monitors = await Promise.all(
@@ -73,9 +73,13 @@ export default async function MonitorsPage() {
 
       {monitors.length === 0 ? (
         <div className="mt-10 rounded-2xl border border-line bg-white p-6">
-          <p className="font-medium text-ink">No monitors yet.</p>
+          <p className="font-medium text-ink">No monitors in this browser yet.</p>
           <p className="mt-2 text-ink-soft">
             Add a website or store listing above, or open any report and choose “Monitor this target”.
+          </p>
+          <p className="mt-2 text-sm text-ink-faint">
+            There are no accounts: monitors are tied to the browser that created them. If you added
+            monitors in another browser or cleared your cookies, they won’t show up here.
           </p>
         </div>
       ) : (
@@ -183,7 +187,7 @@ export default async function MonitorsPage() {
                     policy={policy}
                     digestFrequency={digestFrequency}
                     digestRecipients={dto.digestRecipients}
-                    webhookSecret={dto.webhookSecret}
+                    hasWebhookSecret={dto.hasWebhookSecret}
                     emailEnabled={emailEnabled}
                   />
 

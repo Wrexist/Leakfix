@@ -2,12 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createCheckoutSession } from "@/lib/billing/stripe";
 import { devUnlockEnabled, paymentsConfigured } from "@/lib/billing/pricing";
-import {
-  getScanById,
-  grantEntitlement,
-  hasEntitlement,
-  hasEntitlementForUrl,
-} from "@/lib/scan/repository";
+import { getScanById, grantEntitlement, isScanUnlocked } from "@/lib/scan/repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,8 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "Scan not found." } }, { status: 404 });
   }
 
-  const already =
-    (await hasEntitlement(id)) || (await hasEntitlementForUrl(scan.normalizedUrl));
+  const already = await isScanUnlocked(scan);
   if (already) {
     return NextResponse.json({ unlocked: true, already: true });
   }
@@ -51,14 +45,15 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       {
         error: {
           code: "PAYMENTS_NOT_CONFIGURED",
-          message: "Payments are not configured yet. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID.",
+          message: "Checkout isn't available yet. Please try again later.",
         },
       },
       { status: 503 },
     );
   }
 
-  const origin = new URL(request.url).origin;
+  // Build return URLs from the configured site, not the request's Host header.
+  const origin = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/+$/, "") || new URL(request.url).origin;
   const result = await createCheckoutSession({
     scanId: id,
     successUrl: `${origin}/scan/${id}?unlocked=1`,

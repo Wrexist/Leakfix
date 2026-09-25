@@ -11,6 +11,42 @@ export interface DeliveryOutcome {
 
 const USER_AGENT = "LeakFixBot/0.1 (+https://leakfix.example/bot)";
 
+export type WebhookFlavor = "slack" | "discord" | "generic";
+
+/** Which chat provider (if any) a webhook URL points at. */
+export function webhookFlavor(url: string | null): WebhookFlavor {
+  if (!url) return "generic";
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return "generic";
+  }
+  if (host === "hooks.slack.com") return "slack";
+  if (host === "discord.com" || host === "discordapp.com" || host.endsWith(".discord.com")) {
+    return "discord";
+  }
+  return "generic";
+}
+
+/**
+ * Defuses mass mentions in text that ends up in a chat message. Finding titles
+ * and labels come from scanned pages, so they must not be able to ping a channel.
+ */
+export function neutralizeMentions(value: string): string {
+  return value
+    .replace(/@(everyone|here|channel)/gi, "@\u200b$1")
+    .replace(/<([!@#])/g, "<\u200b$1");
+}
+
+/**
+ * Escapes Slack mrkdwn control characters so page-derived text cannot inject
+ * links (`<url|text>`) or mentions (`<!channel>`, `<@U123>`).
+ */
+export function slackEscape(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 /** HMAC-SHA256 of `timestamp.body`, hex encoded (Stripe-style scheme). */
 export function signPayload(secret: string, timestamp: string | number, body: string): string {
   return createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex");

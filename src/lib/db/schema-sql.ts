@@ -41,6 +41,7 @@ CREATE INDEX IF NOT EXISTS findings_scan_id_idx ON findings (scan_id);
 
 CREATE TABLE IF NOT EXISTS monitors (
   id text PRIMARY KEY,
+  owner_hash text,
   normalized_url text NOT NULL,
   kind text NOT NULL DEFAULT 'website',
   label text,
@@ -61,8 +62,6 @@ CREATE TABLE IF NOT EXISTS monitors (
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-
-CREATE UNIQUE INDEX IF NOT EXISTS monitors_normalized_url_idx ON monitors (normalized_url);
 
 CREATE TABLE IF NOT EXISTS notifications (
   id text PRIMARY KEY,
@@ -108,7 +107,14 @@ ALTER TABLE monitors ADD COLUMN IF NOT EXISTS digest_frequency text NOT NULL DEF
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS digest_recipients jsonb;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS last_digest_at timestamptz;
 ALTER TABLE monitors ADD COLUMN IF NOT EXISTS webhook_secret text;
+ALTER TABLE monitors ADD COLUMN IF NOT EXISTS owner_hash text;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS attempts integer NOT NULL DEFAULT 1;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS payload jsonb;
 ALTER TABLE notifications ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+-- Monitors are unique per (owner, URL), so two browsers can monitor one URL.
+-- Legacy rows keep a NULL owner (NULLs never collide in a unique index).
+DROP INDEX IF EXISTS monitors_normalized_url_idx;
+CREATE UNIQUE INDEX IF NOT EXISTS monitors_owner_url_idx ON monitors (owner_hash, normalized_url);
+CREATE INDEX IF NOT EXISTS monitors_url_idx ON monitors (normalized_url);
 `;

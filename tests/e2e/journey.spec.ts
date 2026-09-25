@@ -128,8 +128,10 @@ test("monitors a target", async ({ page }) => {
   await page.locator("select[id^='notify-policy-']").selectOption("always");
   await page.locator("select[id^='notify-digest-']").selectOption("weekly");
 
-  // A signing secret is generated automatically for the monitor.
-  await expect(page.locator("code", { hasText: "whsec_" }).first()).toBeVisible();
+  // The signing secret is never listed back; rotating reveals a fresh one once.
+  await expect(page.getByText(/hidden for security/i).first()).toBeVisible();
+  await page.getByRole("button", { name: /^rotate$/i }).first().click();
+  await expect(page.locator("code", { hasText: "whsec_" }).first()).toBeVisible({ timeout: 15_000 });
 
   await page.getByRole("button", { name: /^save$/i }).click();
   await expect(page.getByText(/notification settings saved/i)).toBeVisible({ timeout: 15_000 });

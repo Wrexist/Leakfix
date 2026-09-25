@@ -7,7 +7,7 @@ import {
   isDigestFrequency,
   type DigestFrequency,
 } from "./digest-policy";
-import { emailConfigured, sendEmail, type EmailOutcome } from "./email";
+import { emailConfigured, escapeHtml, sendEmail, type EmailOutcome } from "./email";
 import { monitorLabel } from "./monitors";
 import {
   ensureWebhookSecret,
@@ -17,7 +17,7 @@ import {
   listMonitors,
   updateMonitor,
 } from "./repository";
-import { sendWebhookWithRetry } from "./webhook";
+import { neutralizeMentions, sendWebhookWithRetry, slackEscape, webhookFlavor } from "./webhook";
 
 export interface DigestScan {
   id: string;
@@ -122,6 +122,7 @@ export function planDigest(input: {
     input.scans.length >= 2 ? `${base}/compare?a=${first.id}&b=${last.id}` : null;
   const period = input.frequency === "daily" ? "Daily" : input.frequency === "weekly" ? "Weekly" : "";
 
+  // \s+ also folds any line breaks in the label, keeping the subject one line.
   const subject = `LeakFix ${period} digest — ${input.label}`.replace(/\s+/g, " ").trim();
 
   const lines: string[] = [
@@ -154,9 +155,10 @@ export function planDigest(input: {
   }
 
   const text = lines.join("\n");
+  // Label, URL and finding titles are user/page-derived: escape all of them.
   const html = [
-    `<p><strong>LeakFix ${period.toLowerCase()} digest — ${input.label}</strong></p>`,
-    `<p>${input.url}<br>${input.windowLabel}</p>`,
+    `<p><strong>LeakFix ${period.toLowerCase()} digest — ${escapeHtml(input.label)}</strong></p>`,
+    `<p>${escapeHtml(input.url)}<br>${escapeHtml(input.windowLabel)}</p>`,
     delta == null
       ? `<p>Score: <strong>${last.score ?? "—"}/100</strong></p>`
       : `<p>Score: <strong>${first.score} → ${last.score}</strong> (${formatDelta(delta)})</p>`,
@@ -164,14 +166,14 @@ export function planDigest(input: {
     `<p>Scans in period: ${input.scans.length} · New issues: ${input.added.length} · Fixed: ${input.fixed.length}</p>`,
     input.added.length > 0 ? `<h4>New issues</h4><ul>${input.added
       .slice(0, 5)
-      .map((finding) => `<li>[${finding.severity}] ${finding.title}</li>`)
+      .map((finding) => `<li>[${escapeHtml(finding.severity)}] ${escapeHtml(finding.title)}</li>`)
       .join("")}</ul>` : "",
     input.fixed.length > 0 ? `<h4>Fixed</h4><ul>${input.fixed
       .slice(0, 5)
-      .map((finding) => `<li>${finding.title}</li>`)
+      .map((finding) => `<li>${escapeHtml(finding.title)}</li>`)
       .join("")}</ul>` : "",
-    `<p><a href="${reportUrl}">View report</a>${
-      compareUrl ? ` · <a href="${compareUrl}">Compare</a>` : ""
+    `<p><a href="${escapeHtml(reportUrl)}">View report</a>${
+      compareUrl ? ` · <a href="${escapeHtml(compareUrl)}">Compare</a>` : ""
     }</p>`,
   ]
     .filter(Boolean)
@@ -269,9 +271,13 @@ export async function prepareDigest(
 }
 
 export function digestWebhookPayload(plan: DigestPlan, monitor: MonitorRow): Record<string, unknown> {
+  // Chat-rendered text fields get mentions defused; structured fields stay raw.
+  const flavor = webhookFlavor(monitor.notifyWebhookUrl);
+  const chatText = neutralizeMentions(plan.text);
   return {
-    text: plan.text,
-    content: plan.text,
+    text: flavor === "slack" ? slackEscape(plan.text) : chatText,
+    content: chatText,
+    ...(flavor === "discord" ? { allowed_mentions: { parse: [] } } : {}),
     subject: plan.subject,
     digest: true,
     monitor: { id: monitor.id, label: monitorLabel(monitor), url: monitor.normalizedUrl },

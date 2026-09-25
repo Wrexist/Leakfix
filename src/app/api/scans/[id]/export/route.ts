@@ -6,8 +6,7 @@ import { buildCsv, buildMarkdown } from "@/lib/scan/export";
 import {
   getFindingsForScan,
   getScanById,
-  hasEntitlement,
-  hasEntitlementForUrl,
+  isScanUnlocked,
 } from "@/lib/scan/repository";
 
 export const runtime = "nodejs";
@@ -31,8 +30,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "Scan not found." } }, { status: 404 });
   }
 
-  const unlocked =
-    (await hasEntitlement(id)) || (await hasEntitlementForUrl(scan.normalizedUrl));
+  const unlocked = await isScanUnlocked(scan);
   if (!unlocked) {
     return NextResponse.json(
       { error: { code: "PAYWALL", message: "Unlock the full report to export it." } },

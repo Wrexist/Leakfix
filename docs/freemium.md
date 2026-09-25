@@ -40,18 +40,32 @@ Gating is **server-side** — locked content is never sent to the client.
 One row per scan in `entitlements` (`scan_id`, `normalized_url`, `provider`,
 `reference`). An entitlement is also resolved **by URL**, so unlocking one report
 unlocks future scans of the same site — a fair, low-friction policy that also
-makes monitoring coherent.
+makes monitoring coherent. The URL match also requires the new scan to have
+landed on the same host (ignoring `www.`) as the paid scan
+(`hasEntitlementForSite`), so a paid URL can't be redirected at another site to
+unlock that site's report. Every entry point goes through `isScanUnlocked(scan)`.
 
 ## Checkout
 
-Set `STRIPE_SECRET_KEY` and `STRIPE_PRICE_ID` to enable real payments:
+Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` to enable real payments.
+`STRIPE_PRICE_ID` is optional: without it, Checkout charges `LEAKFIX_PRICE_CENTS`
+directly (`price_data`), so the price shown and the price charged can't drift.
+If you do set it, keep it equal to `LEAKFIX_PRICE_CENTS`.
 
 - `POST /api/scans/[id]/unlock` creates a Stripe Checkout Session (one-time
   payment, `client_reference_id` = scan id) and returns `{ checkoutUrl }`.
 - `POST /api/stripe/webhook` verifies the `Stripe-Signature` header
   (`HMAC-SHA256` of `"<timestamp>.<rawBody>"`, 5-minute tolerance,
   `STRIPE_WEBHOOK_SECRET`) and grants the entitlement on
-  `checkout.session.completed`.
+  `checkout.session.completed` **only when `payment_status` is `paid`** (or
+  `no_payment_required` for 100%-off codes). Delayed payment methods grant on
+  `checkout.session.async_payment_succeeded`. Subscribe the endpoint to both events.
+- A paid session whose scan can't be found is acknowledged and logged as
+  `stripe_paid_session_without_scan` — alert on that log line.
+- Checkout allows **promotion codes** (create them in the Stripe dashboard) and
+  sends an idempotency key so a double click reuses one session.
+- After payment, the customer returns to `/scan/[id]?unlocked=1`; the report
+  shows "Confirming your payment…" and polls until the webhook has granted access.
 - Without those env vars the endpoint returns **503** and the paywall says
   checkout is not configured yet.
 
@@ -62,8 +76,9 @@ Pricing shown on the paywall comes from `LEAKFIX_PRICE_CENTS` and
 
 For local testing and the E2E suite, `LEAKFIX_DEV_UNLOCK=true` grants unlocks
 without payment and labels the button "Unlock full report (dev)". It logs a
-warning the first time it is used. **Never enable it in production** — there is no
-other protection, by design, so it stays simple to audit.
+warning the first time it is used. It is **ignored when `NODE_ENV=production`**
+unless `LEAKFIX_DEV_UNLOCK_ALLOW_PRODUCTION=true` is also set, which only the E2E
+suite does (it runs against `next start`). Never set either in a real deployment.
 
 ## Conversion notes
 

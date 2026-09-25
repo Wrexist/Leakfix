@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Hero } from "@/components/Hero";
 import { ChecksCatalog } from "@/components/marketing/ChecksCatalog";
 import { Comparison } from "@/components/marketing/Comparison";
-import { Faq } from "@/components/marketing/Faq";
+import { FAQ, Faq } from "@/components/marketing/Faq";
 import { Platforms } from "@/components/marketing/Platforms";
 import { ProblemSection } from "@/components/marketing/ProblemSection";
 import { Proof } from "@/components/marketing/Proof";
@@ -12,19 +12,22 @@ import { Reveal } from "@/components/motion/Reveal";
 import { RecentScans } from "@/components/RecentScans";
 import { FindingCard } from "@/components/report/FindingCard";
 import { ScanForm } from "@/components/ScanForm";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { REPORT_PRICE } from "@/lib/billing/pricing";
 import { ACTIVE_CATEGORY_COUNT, TOTAL_CHECKS, TOTAL_RULES } from "@/lib/scan/catalog";
 import { EXAMPLE_FINDING } from "@/lib/scan/examples";
+import { SITE_NAME, SITE_URL, absoluteUrl } from "@/lib/site";
 
 export const metadata: Metadata = {
   title: "LeakFix — Find what's costing you customers",
   description:
-    "Paste your website. LeakFix runs real checks across SEO, security, accessibility, mobile, performance, trust, and conversion — then ranks the exact fixes. Free, read-only, no account.",
+    "Paste your website. LeakFix runs real checks across SEO, security, accessibility, mobile, performance, trust, and conversion — then ranks the exact fixes. Free scan and score, no account. Full fix plan is a one-time unlock.",
 };
 
 const STATS: StatItem[] = [
   { value: TOTAL_CHECKS, label: "real checks", detail: `${TOTAL_RULES} possible findings` },
   { value: ACTIVE_CATEGORY_COUNT, label: "categories", detail: "SEO to security" },
-  { value: 0, label: "accounts required", detail: "No signup, no card" },
+  { value: 0, label: "accounts to scan", detail: "Free scan, no card" },
   { value: 100, suffix: "%", label: "read-only", detail: "We never touch your site" },
 ];
 
@@ -46,9 +49,48 @@ const STEPS = [
   },
 ];
 
+const HOME_STRUCTURED_DATA: Record<string, unknown>[] = [
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: SITE_NAME,
+    url: absoluteUrl("/"),
+    applicationCategory: "BusinessApplication",
+    operatingSystem: "Web",
+    description:
+      "Scans a website, App Store, or Google Play listing and returns a scored audit with evidence and ranked fixes.",
+    publisher: { "@id": `${SITE_URL}/#organization` },
+    offers: [
+      {
+        "@type": "Offer",
+        name: "Free scan",
+        price: "0",
+        priceCurrency: REPORT_PRICE.currency.toUpperCase(),
+      },
+      {
+        "@type": "Offer",
+        name: "Full report (one-time, per site)",
+        price: (REPORT_PRICE.amountCents / 100).toFixed(2),
+        priceCurrency: REPORT_PRICE.currency.toUpperCase(),
+        url: absoluteUrl("/pricing"),
+      },
+    ],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: FAQ.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  },
+];
+
 export default function HomePage() {
   return (
     <>
+      <JsonLd data={HOME_STRUCTURED_DATA} />
       <Hero checksCount={TOTAL_CHECKS} />
       <RecentScans />
       <StatsBand stats={STATS} />
@@ -133,7 +175,7 @@ export default function HomePage() {
               Stop the leak today.
             </h2>
             <p className="mx-auto mt-3 max-w-md text-ink-soft">
-              The problems are already there. Find them in seconds — free, and without an account.
+              The problems are already there. Find them in seconds. The scan is free and needs no account.
             </p>
             <div className="mx-auto mt-8 max-w-xl text-left">
               <ScanForm />

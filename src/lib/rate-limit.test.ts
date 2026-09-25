@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { checkRateLimit, resetRateLimits } from "./rate-limit";
+import { checkRateLimit, clientIp, resetRateLimits } from "./rate-limit";
 
 describe("checkRateLimit", () => {
   beforeEach(() => resetRateLimits());
@@ -30,5 +30,25 @@ describe("checkRateLimit", () => {
   it("tracks keys independently", () => {
     checkRateLimit("a", 1, 1000, 0);
     expect(checkRateLimit("b", 1, 1000, 0).allowed).toBe(true);
+  });
+});
+
+describe("clientIp", () => {
+  function request(headers: Record<string, string>): Request {
+    return new Request("http://localhost/", { headers });
+  }
+
+  it("prefers x-real-ip", () => {
+    expect(clientIp(request({ "x-real-ip": "203.0.113.9", "x-forwarded-for": "198.51.100.1" }))).toBe(
+      "203.0.113.9",
+    );
+  });
+
+  it("falls back to the first x-forwarded-for entry", () => {
+    expect(clientIp(request({ "x-forwarded-for": "198.51.100.1, 10.0.0.1" }))).toBe("198.51.100.1");
+  });
+
+  it("returns unknown without proxy headers", () => {
+    expect(clientIp(request({}))).toBe("unknown");
   });
 });

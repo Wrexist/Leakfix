@@ -4,8 +4,7 @@ import { toScanDto } from "@/lib/scan/dto";
 import {
   getFindingsForScan,
   getScanById,
-  hasEntitlement,
-  hasEntitlementForUrl,
+  isScanUnlocked,
 } from "@/lib/scan/repository";
 
 export const runtime = "nodejs";
@@ -25,13 +24,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: { code: "NOT_FOUND", message: "Scan not found." } }, { status: 404 });
   }
 
-  const [findingRows, unlockedForScan, unlockedForUrl] = await Promise.all([
+  const [findingRows, unlocked] = await Promise.all([
     getFindingsForScan(id),
-    hasEntitlement(id),
-    hasEntitlementForUrl(scan.normalizedUrl),
+    isScanUnlocked(scan),
   ]);
 
-  return NextResponse.json(
-    toScanDto(scan, findingRows, { unlocked: unlockedForScan || unlockedForUrl }),
-  );
+  return NextResponse.json(toScanDto(scan, findingRows, { unlocked }));
 }

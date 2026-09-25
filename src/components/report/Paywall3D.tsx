@@ -2,12 +2,15 @@
 
 import { useRouter } from "next/navigation";
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { track } from "@/lib/analytics";
 
 interface Paywall3DProps {
   scanId: string;
   price: string;
   lockedCount: number;
+  lockedSuggestionCount?: number;
   paymentsReady: boolean;
   devUnlock: boolean;
   className?: string;
@@ -26,6 +29,7 @@ export function Paywall3D({
   scanId,
   price,
   lockedCount,
+  lockedSuggestionCount = 0,
   paymentsReady,
   devUnlock,
   className,
@@ -51,6 +55,23 @@ export function Paywall3D({
   const [done, setDone] = useState(false);
 
   const canBuy = paymentsReady || devUnlock;
+
+  // Count a paywall view once, when the card actually scrolls into view.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          track("paywall_viewed", { lockedFixes: lockedCount, paymentsReady });
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [lockedCount, paymentsReady]);
 
   function handleMove(event: React.MouseEvent<HTMLDivElement>) {
     if (reduce || !ref.current) return;
@@ -84,10 +105,12 @@ export function Paywall3D({
         return;
       }
       if (payload?.checkoutUrl) {
+        track("checkout_started", { lockedFixes: lockedCount });
         window.location.href = payload.checkoutUrl;
         return;
       }
       if (payload?.unlocked) {
+        track("report_unlocked", { via: "direct" });
         setDone(true);
         router.refresh();
         setBusy(false);
@@ -125,7 +148,10 @@ export function Paywall3D({
           <div style={reduce ? undefined : { transform: "translateZ(40px)" }} className="max-w-xl">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold tracking-wide text-white/80">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />
-              Free preview · {lockedCount} {lockedCount === 1 ? "fix" : "fixes"} locked
+              Free preview ·{" "}
+              {lockedCount > 0
+                ? `${lockedCount} ${lockedCount === 1 ? "fix" : "fixes"} locked`
+                : `${lockedSuggestionCount} ${lockedSuggestionCount === 1 ? "suggestion" : "suggestions"} locked`}
             </p>
 
             <h3 className="mt-4 text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
@@ -183,8 +209,7 @@ export function Paywall3D({
 
               {!canBuy ? (
                 <p className="mt-3 text-xs text-white/50">
-                  Checkout isn&apos;t configured yet. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID to
-                  accept payments.
+                  Checkout opens soon. Your free preview above stays available.
                 </p>
               ) : (
                 <p className="mt-3 text-xs text-white/50">Secure checkout by Stripe. Instant access.</p>

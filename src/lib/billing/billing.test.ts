@@ -1,8 +1,8 @@
 import { createHmac } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { formatPrice } from "./pricing";
+import { devUnlockEnabled, formatPrice, paymentsConfigured } from "./pricing";
 import { buildCheckoutRequest, verifyStripeSignature } from "./stripe";
 
 const SECRET = "whsec_test";
@@ -50,6 +50,49 @@ describe("buildCheckoutRequest", () => {
     expect(params.get("line_items[0][price]")).toBe("price_123");
     expect(params.get("client_reference_id")).toBe("scan-1");
     expect(params.get("metadata[scanId]")).toBe("scan-1");
+    expect(params.get("allow_promotion_codes")).toBe("true");
+  });
+
+  it("charges the displayed price when no Stripe Price is configured", () => {
+    const { params } = buildCheckoutRequest({
+      scanId: "scan-2",
+      priceId: null,
+      amount: { cents: 1900, currency: "usd", name: "LeakFix full report" },
+      successUrl: "https://leakfix.test/scan/scan-2?unlocked=1",
+      cancelUrl: "https://leakfix.test/scan/scan-2",
+    });
+    expect(params.get("line_items[0][price]")).toBeNull();
+    expect(params.get("line_items[0][price_data][unit_amount]")).toBe("1900");
+    expect(params.get("line_items[0][price_data][currency]")).toBe("usd");
+  });
+});
+
+describe("billing flags", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it("ignores the dev unlock in production", () => {
+    vi.stubEnv("LEAKFIX_DEV_UNLOCK", "true");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(devUnlockEnabled()).toBe(false);
+
+    vi.stubEnv("LEAKFIX_DEV_UNLOCK_ALLOW_PRODUCTION", "true");
+    expect(devUnlockEnabled()).toBe(true);
+  });
+
+  it("allows the dev unlock outside production when explicitly enabled", () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("LEAKFIX_DEV_UNLOCK", "true");
+    expect(devUnlockEnabled()).toBe(true);
+  });
+
+  it("requires the webhook secret before offering checkout", () => {
+    vi.stubEnv("STRIPE_SECRET_KEY", "sk_test_x");
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "");
+    expect(paymentsConfigured()).toBe(false);
+    vi.stubEnv("STRIPE_WEBHOOK_SECRET", "whsec_x");
+    expect(paymentsConfigured()).toBe(true);
   });
 });
 

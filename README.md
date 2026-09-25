@@ -75,6 +75,12 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 - **Scheduled digests**: daily or weekly email summaries per monitor with a
   multi-address recipient list, via `GET|POST /api/cron/digest`, plus a manual
   “Send digest now”. See [docs/monitoring.md](docs/monitoring.md).
+- **Growth / SEO surface**: `/pricing`, a `/checks` reference index and one
+  statically generated page per category (`/checks/[category]`, built from the
+  check catalog), JSON-LD (Organization, WebSite, SoftwareApplication, FAQPage,
+  Product/Offer, breadcrumbs), a sitemap covering all of them, and a per-report
+  share image (`/scan/[id]/opengraph-image`) showing only host, score, and issue
+  counts — never locked fix content.
 - An **explicit scan state machine** (`queued → fetching → analyzing →
   completed | failed`) persisted in the database and reflected in the UI.
 - **Transparent scoring** (see [docs/architecture.md](docs/architecture.md)).
@@ -83,10 +89,22 @@ slice: homepage → scan → persisted results → polished, tabbed report.
 
 ## What is intentionally not built yet
 
-Stripe, subscriptions, agency features, competitor scanning, scheduled monitoring,
-visual/AI analysis, screenshots, and paid entitlements are out of scope for this
-phase. No fake buttons or placeholder features are included. See
-[docs/architecture.md](docs/architecture.md) for the extension points.
+Payments (Stripe Checkout), paid per-site entitlements, scheduled monitoring,
+alerts, and digests are built. These are not, and no fake buttons or placeholder
+features stand in for them:
+
+- **User accounts** — unlocks and monitors are tied to the scanned URL, not a login.
+- **Subscription tiers** — the only paid product is the one-time per-site unlock.
+- **Agency / white-label** — branded PDF reports, multi-site plans, and an
+  embeddable lead-gen audit widget (shown as "coming soon" on `/pricing`).
+- **Competitor scanning** — side-by-side audits of other sites.
+- **JavaScript rendering and real Core Web Vitals** — scans read the server HTML
+  and headers; performance findings are static heuristics.
+- **Multi-page crawl** — each scan audits one URL.
+- **Screenshots** and **visual analysis**.
+- **AI suggestions** — every finding and suggestion is deterministic.
+
+See [docs/architecture.md](docs/architecture.md) for the extension points.
 
 ---
 
@@ -128,6 +146,10 @@ Environment variables:
 | --- | --- | --- |
 | `DATABASE_DIR` | in-memory | Directory for PGlite data. Set to a path (e.g. `./data/pglite`) to persist scans. `memory` is ephemeral. |
 | `LEAKFIX_ALLOW_PRIVATE_TARGETS` | `false` | Test-only. Allows loopback/private scan targets. Never enable in production. |
+| `NEXT_PUBLIC_SITE_URL` | `https://leakfix.example` | Public base URL. Single source of truth (`src/lib/site.ts`) for canonical URLs, Open Graph, JSON-LD, `robots.txt`, and the sitemap. |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | unset | Optional public contact address. When set, the footer shows a Contact link and the "Agency & teams" card on `/pricing` shows a "Tell me when it launches" mailto button. When unset, both are hidden. |
+| `NEXT_PUBLIC_PLAUSIBLE_DOMAIN` | unset | Optional. Loads cookie-free Plausible analytics and records the funnel events in `src/lib/analytics.ts`. |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | unset | Both required for real checkout. `STRIPE_PRICE_ID` is optional (defaults to `LEAKFIX_PRICE_CENTS`). See [docs/freemium.md](docs/freemium.md). |
 
 ## Development
 
