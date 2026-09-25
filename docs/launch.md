@@ -12,6 +12,9 @@ projects. It is fine for a soft launch and testing. Upgrade the team to Pro
 
 1. Vercel → **Add New → Project** → import `Wrexist/Leakfix`.
 2. Framework: Next.js (auto-detected). Leave the build settings as they are.
+   Node is pinned to 22.x in `package.json`. The DNS-pinning code uses the
+   `undici` major that ships with Node 22, so don't raise the version without
+   re-running the tests.
 3. Don't deploy yet; set the database and env vars first.
 
 ## 2. Free database: Neon (5 min)
