@@ -77,8 +77,10 @@ export function FindingCard({
                 <motion.div
                   id={panelId}
                   key="panel"
-                  initial={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
-                  animate={reduce ? { opacity: 1 } : { height: "auto", opacity: 1 }}
+                  // Only `exit` may depend on `reduce`, since the server never applies it;
+                  // MotionConfig already makes the height instant for reduced motion.
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
                   exit={reduce ? { opacity: 0 } : { height: 0, opacity: 0 }}
                   transition={{ duration: 0.3, ease: EASE }}
                   className="overflow-hidden"

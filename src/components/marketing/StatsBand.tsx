@@ -9,15 +9,17 @@ function Counter({ value, suffix = "" }: { value: number; suffix?: string }) {
   const ref = useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.6 });
   const reduce = useReducedMotion();
-  const count = useMotionValue(reduce ? value : 0);
+  // Starts at 0 on the server and in the browser alike: `reduce` is only known in
+  // the browser, so reduced motion jumps to the value in the effect instead.
+  const count = useMotionValue(0);
   const display = useTransform(count, (latest) => `${Math.round(latest)}${suffix}`);
 
   useEffect(() => {
-    if (!inView) return;
     if (reduce) {
       count.set(value);
       return;
     }
+    if (!inView) return;
     const controls = animate(count, value, { duration: 1.1, ease: EASE });
     return () => controls.stop();
   }, [inView, value, reduce, count]);

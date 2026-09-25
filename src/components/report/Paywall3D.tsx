@@ -78,6 +78,8 @@ export function Paywall3D({
   }, [lockedCount, paymentsReady]);
 
   function handleMove(event: React.MouseEvent<HTMLDivElement>) {
+    // Reduced motion is honoured here and in CSS, never in the markup: the server
+    // can't know it, so markup that depended on it failed to hydrate.
     if (reduce || !ref.current) return;
     const rect = ref.current.getBoundingClientRect();
     const px = (event.clientX - rect.left) / rect.width - 0.5;
@@ -130,26 +132,23 @@ export function Paywall3D({
   return (
     <div
       id="unlock"
-      className={`scroll-mt-24 ${className ?? ""}`}
-      style={{ perspective: reduce ? undefined : "1400px" }}
+      className={`scroll-mt-24 motion-safe:perspective-[1400px] ${className ?? ""}`}
     >
       <motion.div
         ref={ref}
         onMouseMove={handleMove}
         onMouseLeave={handleLeave}
-        style={reduce ? undefined : { rotateX, rotateY, transformStyle: "preserve-3d" }}
-        className="relative overflow-hidden rounded-3xl border border-ink/10 bg-ink p-6 text-white shadow-2xl shadow-ink/20 sm:p-9"
+        style={{ rotateX, rotateY }}
+        className="relative overflow-hidden rounded-3xl border border-ink/10 bg-ink p-6 text-white shadow-2xl shadow-ink/20 motion-safe:transform-3d sm:p-9"
       >
-        {!reduce ? (
-          <motion.div
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-0 opacity-70"
-            style={{ background: glow }}
-          />
-        ) : null}
+        <motion.div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 opacity-70 motion-reduce:hidden"
+          style={{ background: glow }}
+        />
 
         <div className="relative sm:flex sm:items-start sm:justify-between sm:gap-10">
-          <div style={reduce ? undefined : { transform: "translateZ(40px)" }} className="max-w-xl">
+          <div className="max-w-xl motion-safe:translate-z-[40px]">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold tracking-wide text-white/80">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />
               Free preview ·{" "}
@@ -180,10 +179,7 @@ export function Paywall3D({
             </ul>
           </div>
 
-          <div
-            style={reduce ? undefined : { transform: "translateZ(70px)" }}
-            className="mt-8 shrink-0 sm:mt-0 sm:w-64"
-          >
+          <div className="mt-8 shrink-0 motion-safe:translate-z-[70px] sm:mt-0 sm:w-64">
             <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
               <p className="text-sm text-white/60">One-time payment</p>
               <p className="mt-1 text-4xl font-semibold tracking-tight">{price}</p>
