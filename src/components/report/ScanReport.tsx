@@ -8,6 +8,7 @@ import type { ScanHistoryData } from "@/lib/scan/history";
 import { AppReport } from "./AppReport";
 import { ActionPlan } from "./ActionPlan";
 import { CategoryBreakdown } from "./CategoryBreakdown";
+import { EmailReport } from "./EmailReport";
 import { ExecutiveSummary } from "./ExecutiveSummary";
 import { FindingList } from "./FindingList";
 import { MethodologyNote } from "./MethodologyNote";
@@ -42,15 +43,21 @@ export function ScanReport({
       <ReportHero scan={scan} host={host} analyzedUrl={analyzedUrl} score={score} />
       <ExecutiveSummary scan={scan} />
       <ScanHistory history={history} currentId={scan.id} />
-      <MonitorPanel url={scan.normalizedUrl} initiallyMonitored={monitored} />
+      <MonitorPanel
+        url={scan.normalizedUrl}
+        initiallyMonitored={monitored}
+        locked={!scan.unlocked}
+      />
       <ActionPlan findings={scan.findings} />
       <FindingList
         findings={scan.findings}
         locked={!scan.unlocked}
+        lockedSuggestionCount={scan.lockedSuggestionCount}
         scanId={scan.id}
         price={billing.price}
         paymentsReady={billing.paymentsReady}
         devUnlock={billing.devUnlock}
+        proPrice={billing.proPrice ?? null}
       />
       <SeoSnapshot seo={scan.insights?.seo ?? null} />
       <Suggestions
@@ -58,6 +65,7 @@ export function ScanReport({
         locked={!scan.unlocked}
         lockedCount={scan.lockedSuggestionCount}
       />
+      <EmailReport scanId={scan.id} locked={!scan.unlocked} />
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

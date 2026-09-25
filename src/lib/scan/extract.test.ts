@@ -43,4 +43,41 @@ describe("extractPage", () => {
     expect(snapshot.hasContactSignal).toBe(false);
     expect(snapshot.hasTrustSignal).toBe(false);
   });
+
+  it("does not count nomodule or non-JavaScript head scripts as render-blocking", () => {
+    const html = `<!doctype html><html><head>
+      <script src="/polyfills.js" nomodule></script>
+      <script src="/data.json" type="application/json"></script>
+      <script src="/app.js" async></script>
+      <script src="/legacy.js"></script>
+    </head><body></body></html>`;
+    expect(extractPage(html, "https://scripts.test/", 200).renderBlockingScripts).toBe(1);
+  });
+
+  it("needs real hours, not just the phrase, to detect opening hours", () => {
+    const article = "<html><body><p>Our guide explains why opening hours matter for local SEO.</p></body></html>";
+    expect(extractPage(article, "https://blog.test/", 200).hasOpeningHours).toBe(false);
+
+    for (const text of ["Opening hours: 9am – 5pm", "Mon–Fri 8:00–18:00", "Hours 10:00 - 22:00 daily"]) {
+      const html = `<html><body><p>${text}</p></body></html>`;
+      expect(extractPage(html, "https://shop.test/", 200).hasOpeningHours).toBe(true);
+    }
+  });
+
+  it("treats a lead form's submit button as a call to action whatever its wording", () => {
+    const lead = `<html><body><form><label>Website <input type="url" name="u"></label>
+      <button type="submit">Find my leaks</button></form></body></html>`;
+    expect(extractPage(lead, "https://lead.test/", 200).ctaCandidates).toContain("Find my leaks");
+
+    const search = `<html><body><form role="search"><input type="search" name="q"><button>Go</button></form></body></html>`;
+    expect(extractPage(search, "https://search.test/", 200).ctaCandidates).toEqual([]);
+  });
+
+  it("detects a store from cart/checkout controls, not the word in prose", () => {
+    const legal = "<html><body><p>Prices include any taxes shown at checkout.</p></body></html>";
+    expect(extractPage(legal, "https://terms.test/", 200).store.hasCheckout).toBe(false);
+
+    const shop = '<html><body><a href="/cart">Cart (2)</a><p>New arrivals</p></body></html>';
+    expect(extractPage(shop, "https://shop.test/", 200).store.hasCheckout).toBe(true);
+  });
 });

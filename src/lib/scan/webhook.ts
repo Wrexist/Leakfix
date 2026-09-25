@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 
-import { resolveAndValidateHost } from "./fetcher";
+import { classifyFetchError, resolveAndValidateHost } from "./fetcher";
+import { withPinnedDispatcher } from "./pinned-dns";
 import { validateUrlInput } from "./url";
 
 export interface DeliveryOutcome {
@@ -10,6 +11,42 @@ export interface DeliveryOutcome {
 }
 
 const USER_AGENT = "LeakFixBot/0.1 (+https://leakfix.example/bot)";
+
+export type WebhookFlavor = "slack" | "discord" | "generic";
+
+/** Which chat provider (if any) a webhook URL points at. */
+export function webhookFlavor(url: string | null): WebhookFlavor {
+  if (!url) return "generic";
+  let host = "";
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return "generic";
+  }
+  if (host === "hooks.slack.com") return "slack";
+  if (host === "discord.com" || host === "discordapp.com" || host.endsWith(".discord.com")) {
+    return "discord";
+  }
+  return "generic";
+}
+
+/**
+ * Defuses mass mentions in text that ends up in a chat message. Finding titles
+ * and labels come from scanned pages, so they must not be able to ping a channel.
+ */
+export function neutralizeMentions(value: string): string {
+  return value
+    .replace(/@(everyone|here|channel)/gi, "@\u200b$1")
+    .replace(/<([!@#])/g, "<\u200b$1");
+}
+
+/**
+ * Escapes Slack mrkdwn control characters so page-derived text cannot inject
+ * links (`<url|text>`) or mentions (`<!channel>`, `<@U123>`).
+ */
+export function slackEscape(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 /** HMAC-SHA256 of `timestamp.body`, hex encoded (Stripe-style scheme). */
 export function signPayload(secret: string, timestamp: string | number, body: string): string {
@@ -45,8 +82,9 @@ export function buildWebhookRequest(
 /**
  * Sends a JSON webhook with the same network-target policy as the scanner:
  * https only (unless explicitly allowed for tests), DNS re-validation, and
- * private/loopback ranges blocked. This prevents notification URLs from being
- * used as an SSRF primitive.
+ * private/loopback ranges blocked, with the connection pinned to the validated
+ * address (see pinned-dns.ts). This prevents notification URLs from being used
+ * as an SSRF primitive, including via DNS rebinding.
  */
 export async function sendWebhook(
   url: string,
@@ -72,13 +110,19 @@ export async function sendWebhook(
   const request = buildWebhookRequest(payload, { signingSecret: options.signingSecret });
 
   try {
-    const response = await fetch(validation.target.href, {
-      method: "POST",
-      redirect: "manual",
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: request.headers,
-      body: request.body,
-    });
+    const response = await fetch(
+      validation.target.href,
+      withPinnedDispatcher(
+        {
+          method: "POST",
+          redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
+          headers: request.headers,
+          body: request.body,
+        },
+        allowPrivate,
+      ),
+    );
     await response.body?.cancel().catch(() => undefined);
     return {
       ok: response.status >= 200 && response.status < 300,
@@ -86,6 +130,10 @@ export async function sendWebhook(
       detail: `http_${response.status}`,
     };
   } catch (error) {
+    // A connect-time rebinding block is permanent, so it must not be retried.
+    if (classifyFetchError(error).code === "BLOCKED_TARGET") {
+      return { ok: false, status: null, detail: "blocked_BLOCKED_TARGET" };
+    }
     const name = (error as { name?: string }).name ?? "error";
     return { ok: false, status: null, detail: `network_${name}` };
   }

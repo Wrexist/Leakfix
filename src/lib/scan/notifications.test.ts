@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 
 import type { MonitorRow } from "@/lib/db/schema";
 
+import { escapeHtml } from "./email";
 import { buildWebhookPayload, planNotification, shouldNotify } from "./notifications";
 import { buildWebhookRequest, sendWebhook, sendWebhookWithRetry, signPayload } from "./webhook";
 
 function monitor(overrides: Partial<MonitorRow> = {}): MonitorRow {
   return {
     id: "monitor-1",
+    ownerHash: null,
     normalizedUrl: "https://example.com/",
     kind: "website",
     label: "Example",
@@ -255,5 +257,55 @@ describe("sendWebhook network guard", () => {
     const outcome = await sendWebhook("https://127.0.0.1/hook", {}, { allowPrivate: false });
     expect(outcome.ok).toBe(false);
     expect(outcome.detail).toMatch(/blocked|invalid_url/);
+  });
+});
+
+describe("template injection", () => {
+  const hostile = {
+    ...base,
+    policy: "always" as const,
+    label: `<img src=x onerror=alert(1)>`,
+    url: `https://example.com/"><script>x()</script>`,
+    previousScore: 60,
+    score: 40,
+    added: [
+      { ruleId: "a", title: "<a href='https://evil.test'>Click</a> @everyone <!channel>", severity: "high" as const, category: "SEO" },
+    ],
+    fixed: [],
+  };
+
+  it("escapeHtml escapes markup and quotes", () => {
+    expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe(
+      "&lt;a href=&quot;x&quot; title=&#39;y&#39;&gt;&amp;&lt;/a&gt;",
+    );
+  });
+
+  it("escapes labels, URLs and finding titles in the email HTML", () => {
+    const plan = planNotification(hostile)!;
+    expect(plan.html).not.toMatch(/<img|<script|<a href='https:\/\/evil/);
+    expect(plan.html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(plan.html).toContain("&lt;script&gt;");
+  });
+
+  it("keeps subjects on one line", () => {
+    const plan = planNotification({ ...hostile, label: "Evil\r\nBcc: victim@example.test" })!;
+    expect(plan.subject).not.toMatch(/[\r\n]/);
+  });
+
+  it("defuses mentions and mrkdwn in Slack payloads", () => {
+    const plan = planNotification(hostile)!;
+    const payload = buildWebhookPayload(plan, monitor({ notifyWebhookUrl: "https://hooks.slack.com/services/abc" }));
+    const serialized = JSON.stringify(payload.blocks) + String(payload.text);
+    expect(serialized).not.toContain("<!channel>");
+    expect(serialized).not.toContain("<a href");
+    expect(serialized).toContain("&lt;!channel&gt;");
+  });
+
+  it("disables mentions in Discord payloads", () => {
+    const plan = planNotification(hostile)!;
+    const payload = buildWebhookPayload(plan, monitor({ notifyWebhookUrl: "https://discord.com/api/webhooks/abc" }));
+    expect(payload.allowed_mentions).toEqual({ parse: [] });
+    expect(String(payload.content)).not.toContain("@everyone");
+    expect(JSON.stringify(payload.embeds)).not.toContain("@everyone");
   });
 });

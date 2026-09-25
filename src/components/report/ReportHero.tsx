@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "motion/react";
 
 import { formatDuration, pluralize } from "@/lib/format";
-import type { ScanDto } from "@/lib/scan/dto";
+import { hasLockedContent, type ScanDto } from "@/lib/scan/dto";
 import { scoreSummary } from "@/lib/scan/score";
 
 import { SeveritySummary } from "../SeveritySummary";
@@ -69,7 +69,7 @@ export function ReportHero({
           <SeveritySummary counts={scan.severityCounts} />
 
           <div className="mt-6 flex flex-wrap gap-3">
-            {scan.totalFindings > 0 && !scan.unlocked ? (
+            {hasLockedContent(scan) ? (
               <a
                 href="#unlock"
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-white transition-colors hover:bg-black"
@@ -89,7 +89,7 @@ export function ReportHero({
                     : "border border-line bg-white text-ink hover:bg-canvas"
                 }`}
               >
-                See the fixes
+                {scan.unlocked ? "See the fixes" : "See priorities"}
                 <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M5 10h10M11 6l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -97,7 +97,7 @@ export function ReportHero({
             ) : null}
             <RescanButton url={scan.finalUrl ?? scan.normalizedUrl} />
             <ShareButton />
-            <ExportMenu scanId={scan.id} />
+            <ExportMenu scanId={scan.id} locked={!scan.unlocked} />
             <Link
               href="/"
               className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas"

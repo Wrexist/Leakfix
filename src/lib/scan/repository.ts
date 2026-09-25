@@ -1,5 +1,6 @@
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, or } from "drizzle-orm";
 
+import { hasActivePro } from "@/lib/auth/pro";
 import { getDb } from "@/lib/db/client";
 import {
   entitlements,
@@ -107,14 +108,88 @@ export async function hasEntitlement(scanId: string): Promise<boolean> {
   return (await getEntitlement(scanId)) !== null;
 }
 
-export async function hasEntitlementForUrl(normalizedUrl: string): Promise<boolean> {
+/**
+ * Entitlements that can unlock *other* scans of a URL for this buyer: the
+ * buyer's own purchases, plus legacy rows from before purchases were tied to a
+ * buyer (NULL `buyer_hash`), which keep their original site-wide behavior.
+ */
+function buyerCanReuse(buyerHash: string | null) {
+  return buyerHash
+    ? or(eq(entitlements.buyerHash, buyerHash), isNull(entitlements.buyerHash))
+    : isNull(entitlements.buyerHash);
+}
+
+/**
+ * Whether this buyer can use paid features for this URL: they bought a report
+ * of it, or their account has an active Pro subscription.
+ */
+export async function hasEntitlementForUrl(
+  normalizedUrl: string,
+  buyerHash: string | null,
+): Promise<boolean> {
+  return (await hasPurchaseForUrl(normalizedUrl, buyerHash)) || (await hasActivePro(buyerHash));
+}
+
+/** Whether this buyer has paid for a report of this URL (ignores Pro). */
+export async function hasPurchaseForUrl(
+  normalizedUrl: string,
+  buyerHash: string | null,
+): Promise<boolean> {
   const { db } = await getDb();
   const rows = await db
     .select({ id: entitlements.id })
     .from(entitlements)
-    .where(eq(entitlements.normalizedUrl, normalizedUrl))
+    .where(and(eq(entitlements.normalizedUrl, normalizedUrl), buyerCanReuse(buyerHash)))
     .limit(1);
   return rows.length > 0;
+}
+
+/** Hostname without a leading "www.", so www/apex variants of a site match. */
+function siteHost(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when this buyer paid for an earlier scan of the same URL that landed on
+ * the same site as this scan. Comparing the fetched host (not only the typed
+ * URL) stops a paid URL from being redirected at another site to unlock its
+ * report for free.
+ */
+export async function hasEntitlementForSite(
+  scan: Pick<ScanRow, "normalizedUrl" | "finalUrl">,
+  buyerHash: string | null,
+): Promise<boolean> {
+  const host = siteHost(scan.finalUrl ?? scan.normalizedUrl);
+  if (!host) return false;
+
+  const { db } = await getDb();
+  const rows = await db
+    .select({ normalizedUrl: scans.normalizedUrl, finalUrl: scans.finalUrl })
+    .from(entitlements)
+    .innerJoin(scans, eq(entitlements.scanId, scans.id))
+    .where(and(eq(entitlements.normalizedUrl, scan.normalizedUrl), buyerCanReuse(buyerHash)))
+    .limit(50);
+
+  return rows.some((paid) => siteHost(paid.finalUrl ?? paid.normalizedUrl) === host);
+}
+
+/**
+ * Whether the full report for this scan is unlocked. A paid scan is open to
+ * anyone with its link (so buyers can share it with a client or team); other
+ * scans of the same site unlock only for the buyer who paid. A Pro subscriber
+ * (the account whose identity is `buyerHash`) sees every report unlocked.
+ */
+export async function isScanUnlocked(scan: ScanRow, buyerHash: string | null): Promise<boolean> {
+  return (
+    (await hasEntitlement(scan.id)) ||
+    (await hasEntitlementForSite(scan, buyerHash)) ||
+    (await hasActivePro(buyerHash))
+  );
 }
 
 /** Grants an unlock for a scan. Idempotent: one entitlement per scan. */
@@ -123,6 +198,8 @@ export async function grantEntitlement(input: {
   normalizedUrl: string;
   provider: string;
   reference?: string | null;
+  buyerHash?: string | null;
+  buyerEmail?: string | null;
 }): Promise<EntitlementRow> {
   const { db } = await getDb();
   await db
@@ -132,6 +209,8 @@ export async function grantEntitlement(input: {
       normalizedUrl: input.normalizedUrl,
       provider: input.provider,
       reference: input.reference ?? null,
+      buyerHash: input.buyerHash ?? null,
+      buyerEmail: input.buyerEmail ?? null,
     })
     .onConflictDoNothing({ target: entitlements.scanId });
 

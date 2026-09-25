@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 
 import { recordRecentScan } from "@/lib/recent-scans";
+import { track } from "@/lib/analytics";
 import { validateUrlSyntax } from "@/lib/scan/url";
 
 interface ScanFormProps {
@@ -68,6 +69,7 @@ export function ScanForm({
         return;
       }
       recordRecentScan({ id: payload.id, url: value });
+      track("scan_started", { kind: (payload as { kind?: string }).kind ?? "website" });
       router.push(`/scan/${payload.id}`);
     } catch {
       setError("We couldn't reach the server. Check your connection and try again.");

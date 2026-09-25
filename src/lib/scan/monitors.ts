@@ -16,7 +16,8 @@ export interface MonitorDto {
   lastScannedAt: string | null;
   notifyWebhookUrl: string | null;
   notifyEmail: string | null;
-  webhookSecret: string | null;
+  /** Whether a signing secret exists. The secret itself is never listed. */
+  hasWebhookSecret: boolean;
   notifyPolicy: string;
   lastNotifiedAt: string | null;
   lastNotifiedScore: number | null;
@@ -26,6 +27,10 @@ export interface MonitorDto {
   createdAt: string;
 }
 
+/**
+ * Public shape of a monitor. Deliberately omits `webhookSecret` (returned only
+ * on create and on explicit rotate) and `ownerHash`.
+ */
 export function toMonitorDto(row: MonitorRow): MonitorDto {
   return {
     id: row.id,
@@ -39,7 +44,7 @@ export function toMonitorDto(row: MonitorRow): MonitorDto {
     lastScannedAt: row.lastScannedAt ? row.lastScannedAt.toISOString() : null,
     notifyWebhookUrl: row.notifyWebhookUrl,
     notifyEmail: row.notifyEmail,
-    webhookSecret: row.webhookSecret,
+    hasWebhookSecret: Boolean(row.webhookSecret),
     notifyPolicy: isNotifyPolicy(row.notifyPolicy) ? row.notifyPolicy : "drop",
     lastNotifiedAt: row.lastNotifiedAt ? row.lastNotifiedAt.toISOString() : null,
     lastNotifiedScore: row.lastNotifiedScore,

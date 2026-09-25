@@ -1,15 +1,21 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { track } from "@/lib/analytics";
 
 interface Paywall3DProps {
   scanId: string;
   price: string;
   lockedCount: number;
+  lockedSuggestionCount?: number;
   paymentsReady: boolean;
   devUnlock: boolean;
+  /** "$29.00/mo" when Pro can be bought; the cross-sell is hidden otherwise. */
+  proPrice?: string | null;
   className?: string;
 }
 
@@ -26,8 +32,10 @@ export function Paywall3D({
   scanId,
   price,
   lockedCount,
+  lockedSuggestionCount = 0,
   paymentsReady,
   devUnlock,
+  proPrice = null,
   className,
 }: Paywall3DProps) {
   const router = useRouter();
@@ -51,6 +59,23 @@ export function Paywall3D({
   const [done, setDone] = useState(false);
 
   const canBuy = paymentsReady || devUnlock;
+
+  // Count a paywall view once, when the card actually scrolls into view.
+  useEffect(() => {
+    const node = ref.current;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          track("paywall_viewed", { lockedFixes: lockedCount, paymentsReady });
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.4 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [lockedCount, paymentsReady]);
 
   function handleMove(event: React.MouseEvent<HTMLDivElement>) {
     if (reduce || !ref.current) return;
@@ -84,10 +109,12 @@ export function Paywall3D({
         return;
       }
       if (payload?.checkoutUrl) {
+        track("checkout_started", { lockedFixes: lockedCount });
         window.location.href = payload.checkoutUrl;
         return;
       }
       if (payload?.unlocked) {
+        track("report_unlocked", { via: "direct" });
         setDone(true);
         router.refresh();
         setBusy(false);
@@ -125,7 +152,10 @@ export function Paywall3D({
           <div style={reduce ? undefined : { transform: "translateZ(40px)" }} className="max-w-xl">
             <p className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs font-semibold tracking-wide text-white/80">
               <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden="true" />
-              Free preview · {lockedCount} {lockedCount === 1 ? "fix" : "fixes"} locked
+              Free preview ·{" "}
+              {lockedCount > 0
+                ? `${lockedCount} ${lockedCount === 1 ? "fix" : "fixes"} locked`
+                : `${lockedSuggestionCount} ${lockedSuggestionCount === 1 ? "suggestion" : "suggestions"} locked`}
             </p>
 
             <h3 className="mt-4 text-2xl font-semibold leading-tight tracking-tight sm:text-3xl">
@@ -158,7 +188,8 @@ export function Paywall3D({
               <p className="text-sm text-white/60">One-time payment</p>
               <p className="mt-1 text-4xl font-semibold tracking-tight">{price}</p>
               <p className="mt-1 text-xs text-white/50">
-                No subscription. Unlocks this report and future scans of this site.
+                No subscription. Unlocks this report (shareable by link) and your future scans of
+                this site.
               </p>
 
               <button
@@ -183,12 +214,22 @@ export function Paywall3D({
 
               {!canBuy ? (
                 <p className="mt-3 text-xs text-white/50">
-                  Checkout isn&apos;t configured yet. Set STRIPE_SECRET_KEY and STRIPE_PRICE_ID to
-                  accept payments.
+                  Checkout opens soon. Your free preview above stays available.
                 </p>
               ) : (
-                <p className="mt-3 text-xs text-white/50">Secure checkout by Stripe. Instant access.</p>
+                <p className="mt-3 text-xs text-white/50">
+                  Secure checkout by Stripe. Instant access. 14-day money-back guarantee.
+                </p>
               )}
+
+              {paymentsReady && proPrice ? (
+                <p className="mt-3 border-t border-white/10 pt-3 text-xs text-white/60">
+                  Fixing several sites?{" "}
+                  <Link href="/pricing" className="font-semibold text-white underline-offset-4 hover:underline">
+                    Pro unlocks every report — {proPrice}
+                  </Link>
+                </p>
+              ) : null}
 
               {error ? (
                 <p role="alert" className="mt-3 text-xs font-medium text-red-300">

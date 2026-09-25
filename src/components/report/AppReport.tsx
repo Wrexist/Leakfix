@@ -7,6 +7,7 @@ import type { ScanHistoryData } from "@/lib/scan/history";
 import { ActionPlan } from "./ActionPlan";
 import { AppHero } from "./AppHero";
 import { CategoryBreakdown } from "./CategoryBreakdown";
+import { EmailReport } from "./EmailReport";
 import { ExecutiveSummary } from "./ExecutiveSummary";
 import { FindingList } from "./FindingList";
 import { MethodologyNote } from "./MethodologyNote";
@@ -33,21 +34,28 @@ export function AppReport({
       <AppHero scan={scan} score={score} />
       <ExecutiveSummary scan={scan} />
       <ScanHistory history={history} currentId={scan.id} />
-      <MonitorPanel url={scan.normalizedUrl} initiallyMonitored={monitored} />
+      <MonitorPanel
+        url={scan.normalizedUrl}
+        initiallyMonitored={monitored}
+        locked={!scan.unlocked}
+      />
       <ActionPlan findings={scan.findings} />
       <FindingList
         findings={scan.findings}
         locked={!scan.unlocked}
+        lockedSuggestionCount={scan.lockedSuggestionCount}
         scanId={scan.id}
         price={billing.price}
         paymentsReady={billing.paymentsReady}
         devUnlock={billing.devUnlock}
+        proPrice={billing.proPrice ?? null}
       />
       <Suggestions
         suggestions={scan.insights?.suggestions ?? []}
         locked={!scan.unlocked}
         lockedCount={scan.lockedSuggestionCount}
       />
+      <EmailReport scanId={scan.id} locked={!scan.unlocked} />
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

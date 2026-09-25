@@ -6,9 +6,12 @@ import { useState } from "react";
 export function MonitorPanel({
   url,
   initiallyMonitored,
+  locked = false,
 }: {
   url: string;
   initiallyMonitored: boolean;
+  /** Monitoring is part of the full report; locked reports point at the paywall. */
+  locked?: boolean;
 }) {
   const [monitored, setMonitored] = useState(initiallyMonitored);
   const [busy, setBusy] = useState(false);
@@ -47,7 +50,9 @@ export function MonitorPanel({
         <p className="mt-1 text-sm leading-relaxed text-ink-soft">
           {monitored
             ? "This target is monitored. Re-scan it on a schedule and track the score over time."
-            : "Get this target re-scanned automatically and watch the score trend over time."}
+            : locked
+              ? "Monitoring comes with the full report: automatic re-scans, score trends, and alerts when something breaks."
+              : "Get this target re-scanned automatically and watch the score trend over time."}
         </p>
         {error ? (
           <p role="alert" className="mt-2 text-sm font-medium text-red-600">
@@ -64,6 +69,13 @@ export function MonitorPanel({
           >
             Manage monitors
           </Link>
+        ) : locked ? (
+          <a
+            href="#unlock"
+            className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-5 text-sm font-semibold text-ink transition-colors hover:bg-canvas"
+          >
+            Unlock to monitor
+          </a>
         ) : (
           <button
             type="button"

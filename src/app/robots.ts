@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://leakfix.example";
+import { absoluteUrl } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -8,9 +8,12 @@ export default function robots(): MetadataRoute.Robots {
       {
         userAgent: "*",
         allow: "/",
-        disallow: ["/api/", "/scan/"],
+        // Reports are crawlable so link previews (X, LinkedIn, Slack) can read
+        // their share image; each report page is `noindex`, which keeps them
+        // out of search results. Blocking the crawl would hide that noindex.
+        disallow: ["/api/", "/monitors", "/compare"],
       },
     ],
-    sitemap: `${BASE_URL}/sitemap.xml`,
+    sitemap: absoluteUrl("/sitemap.xml"),
   };
 }

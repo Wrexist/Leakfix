@@ -4,11 +4,27 @@ export interface EmailOutcome {
   detail: string;
 }
 
+/**
+ * Escapes text for interpolation into HTML (element content or quoted
+ * attributes). Every user- or page-derived value in an email/HTML template —
+ * monitor labels, URLs, finding titles — must pass through this.
+ */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export interface EmailMessage {
   to: string | string[];
   subject: string;
   text: string;
   html: string;
+  /** Extra headers, e.g. `List-Unsubscribe` on follow-up emails (Resend accepts these). */
+  headers?: Record<string, string>;
 }
 
 /**
@@ -46,6 +62,7 @@ export async function sendEmail(
         subject: message.subject,
         text: message.text,
         html: message.html,
+        ...(message.headers ? { headers: message.headers } : {}),
       }),
     });
     await response.body?.cancel().catch(() => undefined);

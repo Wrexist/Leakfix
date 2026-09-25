@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { getMonitorById, rotateWebhookSecret } from "@/lib/scan/repository";
+import {
+  getMonitorForOwner,
+  limitMonitorAction,
+  monitorNotFound,
+  ownerFromRequest,
+} from "@/lib/scan/monitor-owner";
+import { rotateWebhookSecret } from "@/lib/scan/repository";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,16 +14,16 @@ export const dynamic = "force-dynamic";
 const ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** Rotates the monitor's webhook signing secret and returns the new value. */
-export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!ID_PATTERN.test(id)) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
-  const monitor = await getMonitorById(id);
-  if (!monitor) {
-    return NextResponse.json({ error: { code: "NOT_FOUND", message: "Monitor not found." } }, { status: 404 });
-  }
+  const owner = ownerFromRequest(request);
+  if (!owner || !ID_PATTERN.test(id)) return monitorNotFound();
+  const monitor = await getMonitorForOwner(id, owner.hash);
+  if (!monitor) return monitorNotFound();
 
-  const webhookSecret = await rotateWebhookSecret(id);
+  const limited = await limitMonitorAction(request, owner, "secret", 10);
+  if (limited) return limited;
+
+  const webhookSecret = await rotateWebhookSecret(monitor.id);
   return NextResponse.json({ webhookSecret });
 }

@@ -45,7 +45,7 @@ export default function OpengraphImage() {
             Your website is leaking customers.
           </div>
           <div style={{ fontSize: 30, color: "#aab3c5" }}>
-            {`Find the problems costing you conversions. ${TOTAL_CHECKS} real checks. Free.`}
+            {`Find the problems costing you conversions. ${TOTAL_CHECKS} real checks. Free scan.`}
           </div>
         </div>
 

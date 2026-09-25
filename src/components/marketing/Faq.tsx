@@ -1,9 +1,13 @@
 import { Reveal } from "../motion/Reveal";
 
-const FAQ = [
+export const FAQ: { q: string; a: string }[] = [
   {
-    q: "Is this really free?",
-    a: "Yes. Running a scan and reading the full report is free and needs no account. There is nothing hidden behind a signup wall.",
+    q: "What is free, and what do I pay for?",
+    a: "The scan is free and needs no account: your score, every issue we found with its evidence, and the full fix for your top issue. A one-time unlock adds the step-by-step fix for every other issue, copy-paste code, SEO suggestions, exports, and monitoring for that site. No subscription.",
+  },
+  {
+    q: "Can I get a refund?",
+    a: "Yes. If the full report or Pro isn't useful, ask within 14 days of paying and we'll refund you in full. See the refund policy for details.",
   },
   {
     q: "Do you change my website?",

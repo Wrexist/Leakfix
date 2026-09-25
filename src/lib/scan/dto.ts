@@ -104,3 +104,11 @@ export function toScanDto(
     lockedSuggestionCount,
   };
 }
+
+/** True when the free preview is hiding fixes or suggestions that an unlock would reveal. */
+export function hasLockedContent(
+  scan: Pick<ScanDto, "unlocked" | "findings" | "lockedSuggestionCount">,
+): boolean {
+  if (scan.unlocked) return false;
+  return scan.lockedSuggestionCount > 0 || scan.findings.some((finding) => finding.locked);
+}

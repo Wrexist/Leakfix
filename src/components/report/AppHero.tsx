@@ -4,7 +4,7 @@ import Link from "next/link";
 import { motion } from "motion/react";
 
 import { formatDuration } from "@/lib/format";
-import type { ScanDto } from "@/lib/scan/dto";
+import { hasLockedContent, type ScanDto } from "@/lib/scan/dto";
 import { scoreSummary } from "@/lib/scan/score";
 import { SCAN_KIND_LABEL } from "@/lib/scan/types";
 
@@ -100,12 +100,27 @@ export function AppHero({ scan, score }: { scan: ScanDto; score: number }) {
           <SeveritySummary counts={scan.severityCounts} />
 
           <div className="mt-6 flex flex-wrap gap-3">
+            {hasLockedContent(scan) ? (
+              <a
+                href="#unlock"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-white transition-colors hover:bg-black"
+              >
+                Unlock full report
+                <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                  <path d="M5 10h10M11 6l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </a>
+            ) : null}
             {scan.totalFindings > 0 ? (
               <a
                 href="#action-plan"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-ink px-5 text-sm font-semibold text-white transition-colors hover:bg-black"
+                className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl px-5 text-sm font-semibold transition-colors ${
+                  scan.unlocked
+                    ? "bg-ink text-white hover:bg-black"
+                    : "border border-line bg-white text-ink hover:bg-canvas"
+                }`}
               >
-                See the fixes
+                {scan.unlocked ? "See the fixes" : "See priorities"}
                 <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M5 10h10M11 6l4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -113,7 +128,7 @@ export function AppHero({ scan, score }: { scan: ScanDto; score: number }) {
             ) : null}
             <RescanButton url={scan.normalizedUrl} />
             <ShareButton />
-            <ExportMenu scanId={scan.id} />
+            <ExportMenu scanId={scan.id} locked={!scan.unlocked} />
             <Link
               href="/"
               className="inline-flex h-11 items-center justify-center rounded-xl border border-line bg-white px-4 text-sm font-semibold text-ink transition-colors hover:bg-canvas"

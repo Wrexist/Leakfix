@@ -37,6 +37,7 @@ export default defineConfig({
         LEAKFIX_ALLOW_PRIVATE_TARGETS: "true",
         CRON_SECRET: "e2e-secret",
         LEAKFIX_DEV_UNLOCK: "true",
+        LEAKFIX_DEV_UNLOCK_ALLOW_PRODUCTION: "true",
         EMAIL_API_KEY: "e2e-key",
         EMAIL_FROM: "LeakFix <alerts@leakfix.test>",
         EMAIL_API_URL: `http://127.0.0.1:${FIXTURE_PORT}/email`,

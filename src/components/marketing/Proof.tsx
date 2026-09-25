@@ -19,7 +19,7 @@ const PRINCIPLES = [
   },
   {
     title: "Read-only by design",
-    body: "We fetch and read your public page like a search engine. We never modify your site, and no account is required.",
+    body: "We fetch and read your public page like a search engine. We never modify your site, and no account is needed to scan.",
   },
 ];
 
@@ -87,7 +87,7 @@ export function Proof() {
             href="/#scan"
             className="inline-flex h-11 shrink-0 items-center justify-center rounded-xl bg-ink px-5 text-sm font-semibold text-white transition-colors hover:bg-black"
           >
-            Get your free report
+            Run a free scan
           </Link>
         </div>
       </Reveal>

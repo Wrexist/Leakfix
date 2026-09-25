@@ -117,3 +117,25 @@ describe("planDigest", () => {
     expect(plan?.text).toContain("71/100");
   });
 });
+
+describe("planDigest escaping", () => {
+  it("escapes the label, URL and finding titles in the HTML", () => {
+    const plan = planDigest({
+      label: `<script>alert("x")</script>`,
+      url: `https://example.com/"><b>bold</b>`,
+      frequency: "weekly",
+      windowLabel: "Since Sep 12, 2026",
+      scans,
+      added: [{ ruleId: "a", title: "<img src=x onerror=alert(1)>", severity: "high", category: "SEO" }],
+      fixed: [{ ruleId: "b", title: "<iframe src=//evil>", severity: "low", category: "SEO" }],
+      baseUrl: "https://leakfix.test",
+    })!;
+
+    expect(plan.html).not.toMatch(/<script|<img|<iframe|<b>/);
+    expect(plan.html).toContain("&lt;script&gt;alert(&quot;x&quot;)&lt;/script&gt;");
+    expect(plan.html).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    expect(plan.html).toContain("&lt;iframe src=//evil&gt;");
+    // Plain text stays readable (not HTML-escaped).
+    expect(plan.text).toContain(`<script>alert("x")</script>`);
+  });
+});

@@ -1,16 +1,16 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
-import { checkRateLimit } from "@/lib/rate-limit";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { createScan, runScan } from "@/lib/scan/orchestrator";
 import { createScanSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Seconds the platform keeps the function alive for the scan scheduled with `after`. */
+export const maxDuration = 60;
 
 export async function POST(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-  const limit = checkRateLimit(`scan:${ip}`, 10, 60_000);
+  const limit = await rateLimit(`scan:${clientIp(request)}`, 10, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       {
@@ -52,9 +52,10 @@ export async function POST(request: Request) {
     );
   }
 
-  // Detached background work: the scan owns its own error handling and updates
-  // the persisted row, so the HTTP request is not blocked on the fetch.
-  void runScan(result.id);
+  // Runs after the response is sent: the scan owns its own error handling and
+  // updates the persisted row. `after` keeps serverless functions alive until it
+  // finishes, where a bare detached promise could be frozen mid-scan.
+  after(() => runScan(result.id));
 
   return NextResponse.json(
     { id: result.id, status: result.status, kind: result.kind },

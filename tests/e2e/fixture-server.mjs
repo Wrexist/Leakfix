@@ -4,9 +4,40 @@ import { GOOD_PAGE, LEAKY_PAGE } from "./fixtures.mjs";
 
 const port = Number(process.env.FIXTURE_PORT ?? 3101);
 
+/** Emails the app "sent" through EMAIL_API_URL, newest last. Tests read them back. */
+const sentEmails = [];
+
 const server = http.createServer((request, response) => {
-  request.resume();
   const url = request.url ?? "/";
+
+  if (url === "/email" && request.method === "POST") {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+    });
+    request.on("end", () => {
+      try {
+        sentEmails.push(JSON.parse(body));
+      } catch {
+        // Not JSON; nothing to record.
+      }
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ id: `email_${sentEmails.length}` }));
+    });
+    return;
+  }
+
+  request.resume();
+
+  // GET /emails/last?to=<address>: the newest email sent to that address.
+  if (url.startsWith("/emails/last")) {
+    const to = new URL(url, "http://fixture").searchParams.get("to");
+    const match = [...sentEmails].reverse().find((email) => !to || (email.to ?? []).includes(to));
+    response.writeHead(match ? 200 : 404, { "content-type": "application/json" });
+    response.end(JSON.stringify(match ?? { error: "no email" }));
+    return;
+  }
 
   if (url.startsWith("/slow")) {
     setTimeout(() => {

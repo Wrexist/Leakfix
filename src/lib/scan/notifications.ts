@@ -1,14 +1,14 @@
 import type { MonitorRow } from "@/lib/db/schema";
 
 import { compareScans, type ComparedFinding } from "./compare";
-import { sendEmail, type EmailMessage, type EmailOutcome } from "./email";
+import { escapeHtml, sendEmail, type EmailMessage, type EmailOutcome } from "./email";
+import { listMonitorsByUrl } from "./monitor-owner";
 import { monitorLabel } from "./monitors";
 import { isNotifyPolicy, type NotifyPolicy } from "./notify-policy";
 import {
   ensureWebhookSecret,
   getFindingsForScan,
   getMonitorById,
-  getMonitorByUrl,
   getNotificationById,
   getScanById,
   getScansForUrl,
@@ -16,7 +16,14 @@ import {
   updateMonitor,
   updateNotification,
 } from "./repository";
-import { sendWebhook, sendWebhookWithRetry, type DeliveryOutcome } from "./webhook";
+import {
+  neutralizeMentions,
+  sendWebhook,
+  sendWebhookWithRetry,
+  slackEscape,
+  webhookFlavor,
+  type DeliveryOutcome,
+} from "./webhook";
 
 export { isNotifyPolicy, NOTIFY_POLICIES, NOTIFY_POLICY_LABEL } from "./notify-policy";
 export type { NotifyPolicy } from "./notify-policy";
@@ -49,6 +56,11 @@ function siteBaseUrl(override?: string): string {
     /\/$/,
     "",
   );
+}
+
+/** Subjects are a single header line; never let a label carry line breaks. */
+function oneLine(value: string): string {
+  return value.replace(/[\r\n]+/g, " ");
 }
 
 function formatDelta(delta: number): string {
@@ -95,10 +107,11 @@ export function planNotification(input: {
   const compareUrl = input.previousId ? `${base}/compare?a=${input.previousId}&b=${input.scanId}` : null;
   const trend = trendWord(input.previousScore, input.score, delta);
 
-  const subject =
+  const subject = oneLine(
     input.previousScore == null || input.score == null
       ? `LeakFix: ${input.label} first score ${input.score ?? "—"}`
-      : `LeakFix: ${input.label} score ${trend} from ${input.previousScore} to ${input.score}`;
+      : `LeakFix: ${input.label} score ${trend} from ${input.previousScore} to ${input.score}`,
+  );
 
   const lines: string[] = [
     `LeakFix monitoring — ${input.label}`,
@@ -127,9 +140,10 @@ export function planNotification(input: {
   if (compareUrl) lines.push(`Compare: ${compareUrl}`);
 
   const text = lines.join("\n");
+  // Label, URL and finding titles are user/page-derived: escape all of them.
   const html = [
-    `<p><strong>LeakFix monitoring — ${input.label}</strong></p>`,
-    `<p>${input.url}</p>`,
+    `<p><strong>LeakFix monitoring — ${escapeHtml(input.label)}</strong></p>`,
+    `<p>${escapeHtml(input.url)}</p>`,
     input.previousScore == null || input.score == null
       ? `<p>Score: <strong>${input.score ?? "—"}/100</strong></p>`
       : `<p>Score: <strong>${input.previousScore} → ${input.score}</strong> (${formatDelta(delta ?? 0)})</p>`,
@@ -137,11 +151,11 @@ export function planNotification(input: {
     input.added.length > 0
       ? `<ul>${input.added
           .slice(0, 5)
-          .map((finding) => `<li>[${finding.severity}] ${finding.title}</li>`)
+          .map((finding) => `<li>[${escapeHtml(finding.severity)}] ${escapeHtml(finding.title)}</li>`)
           .join("")}</ul>`
       : "",
-    `<p><a href="${reportUrl}">View report</a>${
-      compareUrl ? ` · <a href="${compareUrl}">Compare</a>` : ""
+    `<p><a href="${escapeHtml(reportUrl)}">View report</a>${
+      compareUrl ? ` · <a href="${escapeHtml(compareUrl)}">Compare</a>` : ""
     }</p>`,
   ]
     .filter(Boolean)
@@ -171,15 +185,6 @@ export interface NotifyDeps {
   signPayload?: boolean;
 }
 
-function webhookHost(url: string | null): string {
-  if (!url) return "";
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return "";
-  }
-}
-
 function issueLines(findings: ComparedFinding[], limit = 5): string {
   if (findings.length === 0) return "None";
   return findings
@@ -200,7 +205,7 @@ function slackBlocks(plan: NotificationPlan): unknown[] {
     {
       type: "section",
       fields: [
-        { type: "mrkdwn", text: `*Score*\n${scoreLine(plan)}` },
+        { type: "mrkdwn", text: `*Score*\n${slackEscape(scoreLine(plan))}` },
         { type: "mrkdwn", text: `*New / Fixed*\n${plan.added.length} / ${plan.fixed.length}` },
       ],
     },
@@ -208,13 +213,13 @@ function slackBlocks(plan: NotificationPlan): unknown[] {
   if (plan.added.length > 0) {
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `*New issues*\n${issueLines(plan.added)}` },
+      text: { type: "mrkdwn", text: `*New issues*\n${slackEscape(issueLines(plan.added))}` },
     });
   }
   if (plan.fixed.length > 0) {
     blocks.push({
       type: "section",
-      text: { type: "mrkdwn", text: `*Fixed*\n${issueLines(plan.fixed)}` },
+      text: { type: "mrkdwn", text: `*Fixed*\n${slackEscape(issueLines(plan.fixed))}` },
     });
   }
   const elements: unknown[] = [
@@ -236,15 +241,23 @@ function discordEmbeds(plan: NotificationPlan, monitor: MonitorRow): unknown[] {
         : 0x2f5bff;
   return [
     {
-      title: plan.subject,
+      title: neutralizeMentions(plan.subject),
       url: plan.reportUrl,
       description: `Score ${scoreLine(plan)}`,
       color,
       fields: [
-        { name: `New issues (${plan.added.length})`, value: issueLines(plan.added), inline: false },
-        { name: `Fixed (${plan.fixed.length})`, value: issueLines(plan.fixed), inline: false },
+        {
+          name: `New issues (${plan.added.length})`,
+          value: neutralizeMentions(issueLines(plan.added)),
+          inline: false,
+        },
+        {
+          name: `Fixed (${plan.fixed.length})`,
+          value: neutralizeMentions(issueLines(plan.fixed)),
+          inline: false,
+        },
       ],
-      footer: { text: monitorLabel(monitor) },
+      footer: { text: neutralizeMentions(monitorLabel(monitor)) },
     },
   ];
 }
@@ -257,9 +270,11 @@ export function buildWebhookPayload(
   plan: NotificationPlan,
   monitor: MonitorRow,
 ): Record<string, unknown> {
+  // Chat-rendered text fields get mentions defused; structured fields stay raw.
+  const chatText = neutralizeMentions(plan.text);
   const base: Record<string, unknown> = {
-    text: plan.text,
-    content: plan.text,
+    text: chatText,
+    content: chatText,
     subject: plan.subject,
     monitor: { id: monitor.id, label: monitorLabel(monitor), url: monitor.normalizedUrl },
     score: plan.score,
@@ -279,12 +294,12 @@ export function buildWebhookPayload(
     compareUrl: plan.compareUrl,
   };
 
-  const host = webhookHost(monitor.notifyWebhookUrl);
-  if (host === "hooks.slack.com") {
-    return { ...base, blocks: slackBlocks(plan) };
+  const flavor = webhookFlavor(monitor.notifyWebhookUrl);
+  if (flavor === "slack") {
+    return { ...base, text: slackEscape(plan.text), blocks: slackBlocks(plan) };
   }
-  if (host === "discord.com" || host === "discordapp.com" || host.endsWith(".discord.com")) {
-    return { ...base, embeds: discordEmbeds(plan, monitor) };
+  if (flavor === "discord") {
+    return { ...base, allowed_mentions: { parse: [] }, embeds: discordEmbeds(plan, monitor) };
   }
   return base;
 }
@@ -407,8 +422,9 @@ export async function retryNotification(
 }
 
 /**
- * Called after a scan completes. Sends a notification when the monitor's policy
- * matches the change. Never throws — notifications must not break scanning.
+ * Called after a scan completes. Notifies every monitor of the URL (one per
+ * owning browser) whose policy matches the change. Never throws — notifications
+ * must not break scanning.
  */
 export async function notifyMonitorChange(
   scanId: string,
@@ -418,9 +434,11 @@ export async function notifyMonitorChange(
     const scan = await getScanById(scanId);
     if (!scan || scan.status !== "completed") return [];
 
-    const monitor = await getMonitorByUrl(scan.normalizedUrl);
-    if (!monitor || !monitor.active) return [];
-    if (!monitor.notifyWebhookUrl && !monitor.notifyEmail) return [];
+    // Several browsers can monitor the same URL; each gets its own notification.
+    const monitors = (await listMonitorsByUrl(scan.normalizedUrl)).filter(
+      (monitor) => monitor.active && (monitor.notifyWebhookUrl || monitor.notifyEmail),
+    );
+    if (monitors.length === 0) return [];
 
     const history = await getScansForUrl(scan.normalizedUrl, 6);
     const previous = history.find((row) => row.id !== scan.id) ?? null;
@@ -435,26 +453,30 @@ export async function notifyMonitorChange(
       { findings, score: scan.score },
     );
 
-    const policy: NotifyPolicy = isNotifyPolicy(monitor.notifyPolicy) ? monitor.notifyPolicy : "drop";
-
-    const plan = planNotification({
-      policy,
-      label: monitorLabel(monitor),
-      url: scan.normalizedUrl,
-      previousScore: previous?.score ?? null,
-      score: scan.score,
-      added: diff.added,
-      fixed: diff.fixed,
-      scanId: scan.id,
-      previousId: previous?.id ?? null,
-      baseUrl: deps.baseUrl,
-    });
-    if (!plan) return [];
-
     const allowPrivate =
       deps.allowPrivate ?? process.env.LEAKFIX_ALLOW_PRIVATE_TARGETS === "true";
-    const deliveries = await dispatch(monitor, scan.id, plan, { ...deps, allowPrivate });
-    await updateMonitor(monitor.id, { lastNotifiedAt: new Date(), lastNotifiedScore: scan.score });
+    const deliveries: NotificationDelivery[] = [];
+
+    for (const monitor of monitors) {
+      const policy: NotifyPolicy = isNotifyPolicy(monitor.notifyPolicy) ? monitor.notifyPolicy : "drop";
+
+      const plan = planNotification({
+        policy,
+        label: monitorLabel(monitor),
+        url: scan.normalizedUrl,
+        previousScore: previous?.score ?? null,
+        score: scan.score,
+        added: diff.added,
+        fixed: diff.fixed,
+        scanId: scan.id,
+        previousId: previous?.id ?? null,
+        baseUrl: deps.baseUrl,
+      });
+      if (!plan) continue;
+
+      deliveries.push(...(await dispatch(monitor, scan.id, plan, { ...deps, allowPrivate })));
+      await updateMonitor(monitor.id, { lastNotifiedAt: new Date(), lastNotifiedScore: scan.score });
+    }
     return deliveries;
   } catch {
     return [];
@@ -474,9 +496,9 @@ export async function sendTestNotification(
     delta: 0,
     added: [],
     fixed: [],
-    subject: `LeakFix test notification — ${monitorLabel(monitor)}`,
+    subject: oneLine(`LeakFix test notification — ${monitorLabel(monitor)}`),
     text: `This is a test notification for ${monitorLabel(monitor)} (${monitor.normalizedUrl}). If you can read this, notifications are configured correctly.\n\n${base}/monitors`,
-    html: `<p>This is a test notification for <strong>${monitorLabel(monitor)}</strong>.</p><p><a href="${base}/monitors">Open monitors</a></p>`,
+    html: `<p>This is a test notification for <strong>${escapeHtml(monitorLabel(monitor))}</strong>.</p><p><a href="${escapeHtml(`${base}/monitors`)}">Open monitors</a></p>`,
     reportUrl: base,
     compareUrl: null,
   };
