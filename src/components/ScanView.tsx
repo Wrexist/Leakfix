@@ -150,8 +150,10 @@ export function ScanView({
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={view}
-          initial={reduce ? { opacity: 0 } : { opacity: 0, y: 12 }}
-          animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          // Only `exit` may depend on `reduce`, since the server never applies it;
+          // MotionConfig already makes the y instant for reduced motion.
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
           exit={reduce ? { opacity: 0 } : { opacity: 0, y: -8 }}
           transition={{ duration: 0.4, ease: EASE }}
         >

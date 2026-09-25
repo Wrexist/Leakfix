@@ -84,6 +84,30 @@ test("persists the report across a reload (server-rendered result)", async ({ pa
   await expect(page.getByRole("heading", { name: "Missing mobile viewport tag" })).toBeVisible();
 });
 
+test("hydrates without a mismatch for reduced-motion visitors", async ({ page }) => {
+  // The suite runs with reduced motion, which the server can't see: markup chosen
+  // from useReducedMotion() differs in the browser and throws React error #418.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const hideFix = page.getByRole("button", { name: /hide fix details/i });
+
+  // The open example finding only collapses once the page has hydrated.
+  await page.goto("/");
+  await hideFix.click();
+  await expect(hideFix).toHaveCount(0);
+
+  await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/good`);
+  await page.getByRole("button", { name: /find my leaks/i }).first().click();
+  await expect(page.getByRole("heading", { name: "All findings" })).toBeVisible({ timeout: 30_000 });
+
+  // Reload so the finished report, paywall included, is server-rendered and hydrated.
+  await page.reload();
+  await hideFix.click();
+  await expect(hideFix).toHaveCount(0);
+
+  expect(errors).toEqual([]);
+});
+
 test("shows a friendly error for unsupported content with a retry", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Website address").first().fill(`${FIXTURE_ORIGIN}/json`);
