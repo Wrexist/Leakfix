@@ -35,6 +35,22 @@ const SECURITY_HEADERS = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
+/**
+ * The static demo (`npm run build:pages`, deployed to GitHub Pages) is a plain
+ * HTML export with sample reports and no server. Only `*.demo.tsx` / `*.demo.ts`
+ * route files are part of it, so API routes and database-backed pages are left
+ * out without moving files. Static hosts ignore custom headers, so none are set.
+ */
+const DEMO_MODE = process.env.NEXT_PUBLIC_DEMO_MODE === "true";
+
+const demoConfig: NextConfig = {
+  output: "export",
+  // GitHub Pages serves project sites from /<repo>; the workflow passes it in.
+  basePath: process.env.NEXT_PUBLIC_BASE_PATH || undefined,
+  trailingSlash: true,
+  pageExtensions: ["demo.tsx", "demo.ts"],
+};
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
@@ -42,9 +58,13 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["@electric-sql/pglite"],
   // Pin the workspace root so a stray lockfile above the repo cannot confuse Turbopack.
   turbopack: { root: process.cwd() },
-  async headers() {
-    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
-  },
+  ...(DEMO_MODE
+    ? demoConfig
+    : {
+        async headers() {
+          return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+        },
+      }),
 };
 
 export default nextConfig;

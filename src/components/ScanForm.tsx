@@ -3,9 +3,19 @@
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
 
+import {
+  DEMO_MODE,
+  demoSampleForUrl,
+  demoSamplesFor,
+  queueDemoRun,
+  type DemoSample,
+} from "@/lib/demo";
 import { recordRecentScan } from "@/lib/recent-scans";
 import { track } from "@/lib/analytics";
+import type { ScanKind } from "@/lib/scan/types";
 import { validateUrlSyntax } from "@/lib/scan/url";
+
+import { SamplePicker } from "./demo/SamplePicker";
 
 interface ScanFormProps {
   defaultValue?: string;
@@ -13,6 +23,8 @@ interface ScanFormProps {
   compact?: boolean;
   placeholder?: string;
   example?: string;
+  /** Demo only: which sample sites to offer. */
+  kind?: ScanKind;
 }
 
 export function ScanForm({
@@ -21,6 +33,7 @@ export function ScanForm({
   compact = false,
   placeholder = "https://yourwebsite.com",
   example = "example.com",
+  kind,
 }: ScanFormProps) {
   const router = useRouter();
   const inputId = useId();
@@ -28,9 +41,20 @@ export function ScanForm({
   const hintId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [value, setValue] = useState(defaultValue);
+  const samples = DEMO_MODE ? demoSamplesFor(kind) : [];
+  // The demo starts filled in, so one click shows the whole journey.
+  const [value, setValue] = useState(defaultValue || (samples[0]?.url ?? ""));
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function startDemoScan(sample: DemoSample) {
+    setValue(sample.url);
+    setError(null);
+    setSubmitting(true);
+    queueDemoRun(sample.id);
+    track("scan_started", { kind: sample.kind });
+    router.push(`/scan/${sample.id}/`);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,6 +65,17 @@ export function ScanForm({
     if (!validation.ok) {
       setError(validation.message);
       inputRef.current?.focus();
+      return;
+    }
+
+    if (DEMO_MODE) {
+      const sample = demoSampleForUrl(value);
+      if (sample) {
+        startDemoScan(sample);
+      } else {
+        setError("Live scans are off in this demo. Pick one of the sample sites below.");
+        inputRef.current?.focus();
+      }
       return;
     }
 
@@ -124,19 +159,25 @@ export function ScanForm({
         </button>
       </div>
       <p id={hintId} className="mt-3 text-sm text-ink-faint">
-        Public pages only. No account needed.
+        {DEMO_MODE
+          ? "Demo: scans run on built-in sample sites."
+          : "Public pages only. No account needed."}
       </p>
       {error ? (
         <p id={errorId} role="alert" className="mt-2 text-sm font-medium text-red-600">
           {error}
         </p>
       ) : (
-        !compact && (
+        !compact &&
+        !DEMO_MODE && (
           <p className="mt-2 break-all text-sm text-ink-faint">
             Try it with <span className="font-mono text-ink-soft">{example}</span>
           </p>
         )
       )}
+      {DEMO_MODE ? (
+        <SamplePicker samples={samples} onPick={startDemoScan} disabled={submitting} />
+      ) : null}
     </form>
   );
 }

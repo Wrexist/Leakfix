@@ -23,9 +23,8 @@ export function ScoreRing({ score, size = 148 }: { score: number; size?: number 
   const color = BAND_COLOR[scoreBand(clamped)];
 
   const offset = useMotionValue(circumference);
-  const scoreText = useTransform(offset, (value) =>
-    Math.round(clamped * (1 - value / circumference)),
-  );
+  // The ring's filled share, so the number counts up to the score as the arc draws.
+  const scoreText = useTransform(offset, (value) => Math.round(100 * (1 - value / circumference)));
 
   useEffect(() => {
     if (reduce) {

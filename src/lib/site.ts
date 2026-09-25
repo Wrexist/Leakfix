@@ -1,3 +1,5 @@
+import { DEMO_MODE } from "./demo";
+
 /** Public base URL of the site. Single source of truth for canonical, OG, sitemap, and robots. */
 export const SITE_URL = (process.env.NEXT_PUBLIC_SITE_URL || "https://leakfix.example").replace(/\/+$/, "");
 
@@ -34,12 +36,21 @@ export function clampDescription(text: string, max = MAX_DESCRIPTION): string {
 }
 
 /**
+ * The shared link-preview image. The static demo writes it as a PNG file
+ * (src/app/social-card.png) because it has no server for /opengraph-image.
+ */
+export function socialImage() {
+  const path = DEMO_MODE ? "/social-card.png" : "/opengraph-image";
+  return { url: absoluteUrl(path), width: 1200, height: 630, alt: SITE_NAME };
+}
+
+/**
  * Complete Open Graph + X card metadata for a page. A page-level `openGraph`
  * replaces the layout's entirely in Next.js (it is not merged), so pages must
  * restate the site name, type, description, and the shared preview image.
  */
 export function pageSocialMetadata(input: { title: string; description: string; path: string }) {
-  const image = { url: absoluteUrl("/opengraph-image"), width: 1200, height: 630, alt: SITE_NAME };
+  const image = socialImage();
   return {
     openGraph: {
       type: "website" as const,

@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import type { BillingInfo } from "@/lib/billing/pricing";
+import { DEMO_MODE } from "@/lib/demo";
 import type { ScanDto } from "@/lib/scan/dto";
 import type { ScanHistoryData } from "@/lib/scan/history";
 
@@ -34,11 +35,14 @@ export function AppReport({
       <AppHero scan={scan} score={score} />
       <ExecutiveSummary scan={scan} />
       <ScanHistory history={history} currentId={scan.id} />
-      <MonitorPanel
-        url={scan.normalizedUrl}
-        initiallyMonitored={monitored}
-        locked={!scan.unlocked}
-      />
+      {/* Monitoring and email need the server, so the static demo leaves them out. */}
+      {DEMO_MODE ? null : (
+        <MonitorPanel
+          url={scan.normalizedUrl}
+          initiallyMonitored={monitored}
+          locked={!scan.unlocked}
+        />
+      )}
       <ActionPlan findings={scan.findings} />
       <FindingList
         findings={scan.findings}
@@ -55,7 +59,7 @@ export function AppReport({
         locked={!scan.unlocked}
         lockedCount={scan.lockedSuggestionCount}
       />
-      <EmailReport scanId={scan.id} locked={!scan.unlocked} />
+      {DEMO_MODE ? null : <EmailReport scanId={scan.id} locked={!scan.unlocked} />}
       <PassedChecks summary={scan.auditSummary} />
       <CategoryBreakdown findings={scan.findings} />
       <MethodologyNote />

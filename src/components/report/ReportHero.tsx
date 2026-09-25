@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 
+import { DEMO_MODE } from "@/lib/demo";
 import { formatDuration, pluralize } from "@/lib/format";
 import { hasLockedContent, type ScanDto } from "@/lib/scan/dto";
 import { scoreSummary } from "@/lib/scan/score";
@@ -35,20 +36,27 @@ export function ReportHero({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: EASE }}
       >
-        <p className="text-sm font-semibold tracking-wide text-brand">Scan report</p>
+        <p className="text-sm font-semibold tracking-wide text-brand">
+          {DEMO_MODE ? "Sample report" : "Scan report"}
+        </p>
         <h1 className="mt-2 break-words text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
           {host}
         </h1>
         <p className="mt-3 break-words text-ink-soft">
           Analyzed{" "}
-          <a
-            href={analyzedUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink"
-          >
-            {analyzedUrl}
-          </a>
+          {/* Demo sites are fictional (.example), so there is nothing to open. */}
+          {DEMO_MODE ? (
+            <span className="font-medium text-ink">{analyzedUrl}</span>
+          ) : (
+            <a
+              href={analyzedUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="font-medium text-ink underline decoration-line-strong underline-offset-4 hover:decoration-ink"
+            >
+              {analyzedUrl}
+            </a>
+          )}
           {duration ? ` · completed in ${duration}` : null}
         </p>
       </motion.div>

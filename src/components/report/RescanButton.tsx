@@ -3,12 +3,19 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { useDemoReport } from "../demo/DemoReportContext";
+
 export function RescanButton({ url }: { url: string }) {
   const router = useRouter();
+  const demo = useDemoReport();
   const [busy, setBusy] = useState(false);
 
   async function handleRescan() {
     if (busy) return;
+    if (demo) {
+      demo.rescan();
+      return;
+    }
     setBusy(true);
     try {
       const response = await fetch("/api/scans", {

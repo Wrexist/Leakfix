@@ -7,6 +7,8 @@ import { useEffect, useRef, useState } from "react";
 
 import { track } from "@/lib/analytics";
 
+import { useDemoReport } from "../demo/DemoReportContext";
+
 interface Paywall3DProps {
   scanId: string;
   price: string;
@@ -41,6 +43,7 @@ export function Paywall3D({
   const router = useRouter();
   const reduce = useReducedMotion();
   const ref = useRef<HTMLDivElement>(null);
+  const demo = useDemoReport();
 
   const rotateX = useSpring(0, { stiffness: 150, damping: 20 });
   const rotateY = useSpring(0, { stiffness: 150, damping: 20 });
@@ -58,7 +61,7 @@ export function Paywall3D({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
-  const canBuy = paymentsReady || devUnlock;
+  const canBuy = paymentsReady || devUnlock || demo !== null;
 
   // Count a paywall view once, when the card actually scrolls into view.
   useEffect(() => {
@@ -97,6 +100,11 @@ export function Paywall3D({
     if (busy) return;
     setBusy(true);
     setError(null);
+    if (demo) {
+      // No checkout in the demo; a short beat so the unlock doesn't feel like a glitch.
+      window.setTimeout(demo.unlock, 600);
+      return;
+    }
     try {
       const response = await fetch(`/api/scans/${scanId}/unlock`, { method: "POST" });
       const payload = (await response.json().catch(() => null)) as
@@ -203,7 +211,7 @@ export function Paywall3D({
                 ) : busy ? (
                   <>
                     <span className="h-4 w-4 animate-spin-slow rounded-full border-2 border-ink/20 border-t-ink" />
-                    Starting…
+                    {demo ? "Unlocking…" : "Starting…"}
                   </>
                 ) : devUnlock && !paymentsReady ? (
                   "Unlock full report (dev)"
@@ -215,6 +223,10 @@ export function Paywall3D({
               {!canBuy ? (
                 <p className="mt-3 text-xs text-white/50">
                   Checkout opens soon. Your free preview above stays available.
+                </p>
+              ) : demo ? (
+                <p className="mt-3 text-xs text-white/50">
+                  Demo: unlocks instantly. No payment is taken.
                 </p>
               ) : (
                 <p className="mt-3 text-xs text-white/50">
